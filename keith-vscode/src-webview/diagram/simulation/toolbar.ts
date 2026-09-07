@@ -53,6 +53,7 @@ export class Toolbar {
     render(state: SimulationViewState): void {
         const key = JSON.stringify([
             state.phase,
+            state.canStart,
             state.playing,
             state.model,
             state.error,
@@ -116,7 +117,8 @@ export class Toolbar {
                     'Simulate…',
                     'Compile the model with a simulation system and step through it tick by tick',
                     () => this.host.send({ kind: 'start' }),
-                    '.kv-btn-primary'
+                    '.kv-btn-primary',
+                    !state.canStart
                 ),
                 state.error && h('span.kv-error', { title: state.error, role: 'alert' }, icon('warning'), state.error)
             )

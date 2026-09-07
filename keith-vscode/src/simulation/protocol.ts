@@ -41,13 +41,15 @@ export type SimulationPhase = 'idle' | 'starting' | 'running' | 'stopping'
 
 export interface SimulationViewState {
     phase: SimulationPhase
+    canStart: boolean
     playing: boolean
     tick: number
     /** Tick number of `history[0]`; earlier ticks are dropped to bound the message size. */
     firstTick: number
     stepDelay: number
     showInternal: boolean
-    /** File name of the model being simulated, when known. */
+    /** URI and file name of the model shown in this preview. */
+    modelUri?: string
     model?: string
     variables: SimulationVariableState[]
     error?: string
@@ -72,7 +74,10 @@ export const simulationStateNotification: NotificationType<SimulationViewState> 
     method: 'keith/simulation/viewState',
 }
 
-export const simulationCommandNotification: NotificationType<SimulationViewCommand> = {
+/** The preview URI captured when a control was used, before the panel can switch files. */
+export type SimulationViewRequest = SimulationViewCommand & { modelUri?: string }
+
+export const simulationCommandNotification: NotificationType<SimulationViewRequest> = {
     method: 'keith/simulation/viewCommand',
 }
 

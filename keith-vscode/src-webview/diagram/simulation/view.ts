@@ -114,7 +114,10 @@ export class SimulationView {
     }
 
     private send(command: SimulationViewCommand): void {
-        this.messenger.sendNotification(simulationCommandNotification, HOST_EXTENSION, command)
+        this.messenger.sendNotification(simulationCommandNotification, HOST_EXTENSION, {
+            ...command,
+            modelUri: this.state?.modelUri,
+        })
     }
 
     private formatFor(id: string): NumberFormat {
@@ -172,6 +175,7 @@ export class SimulationView {
         resize.observe(container)
         this.toolbar.render({
             phase: 'idle',
+            canStart: false,
             playing: false,
             tick: 0,
             firstTick: 1,
@@ -182,6 +186,14 @@ export class SimulationView {
     }
 
     private update(state: SimulationViewState): void {
+        if (
+            state.modelUri !== this.state?.modelUri ||
+            state.phase !== 'running' ||
+            state.tick < (this.state?.tick ?? 0)
+        ) {
+            this.timeline.clear()
+            replaceChildren(this.summary)
+        }
         this.state = state
         this.toolbar.render(state)
         const showDrawer = state.phase === 'running' && this.drawerOpen

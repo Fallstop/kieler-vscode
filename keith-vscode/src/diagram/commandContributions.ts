@@ -129,13 +129,10 @@ export function registerCommands(manager: KLighDWebviewPanelManager, context: vs
 export function registerTextEditorSync(manager: KLighDWebviewPanelManager, context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-            const activeWebview = manager.findActiveWebview()
-            const alreadyOpen =
-                `${editor?.document.uri.scheme}://${editor?.document.uri.path}` ===
-                activeWebview?.diagramIdentifier?.uri
+            const alreadyOpen = editor?.document.uri.toString() === manager.currentUri?.toString()
             const shouldOpen = manager.storageService.getItem('diagramOpen')
             if (editor && manager.getSyncWithEdior() && !alreadyOpen && shouldOpen) {
-                manager.openDiagram(editor.document.uri)
+                await manager.openDiagram(editor.document.uri)
             }
         })
     )

@@ -33,7 +33,7 @@ import {
 import {
     HISTORY_WINDOW,
     SimulationVariableState,
-    SimulationViewCommand,
+    SimulationViewRequest,
     SimulationViewState,
     simulationCommandNotification,
     simulationStateNotification,
@@ -83,8 +83,16 @@ export class SimulationViewBridge implements vscode.Disposable {
         this.diagrams.sendToDiagram(simulationStateNotification, this.viewState())
     }
 
-    private async handle(command: SimulationViewCommand): Promise<void> {
+    private async handle(command: SimulationViewRequest): Promise<void> {
         if (!command || typeof command.kind !== 'string') return
+        if (!['requestState', 'setStepDelay', 'setShowInternal'].includes(command.kind)) {
+            const state = this.viewState()
+            const canHandle = command.kind === 'start' ? state.canStart : state.phase === 'running'
+            if (!command.modelUri || command.modelUri !== state.modelUri || !canHandle) {
+                this.push()
+                return
+            }
+        }
         switch (command.kind) {
             case 'requestState':
                 this.push()
@@ -144,27 +152,29 @@ export class SimulationViewBridge implements vscode.Disposable {
 
     viewState(): SimulationViewState {
         const sim = this.simulation
-        const tick = sim.simulationStep < 0 ? 0 : sim.simulationStep
+        const uri = this.diagrams.currentUri
+        const modelUri = uri?.toString()
+        const matches = !!modelUri && !!sim.modelUri && modelUri === vscode.Uri.parse(sim.modelUri).toString()
+        const tick = matches ? Math.max(0, sim.simulationStep) : 0
         const firstTick = Math.max(1, tick - HISTORY_WINDOW + 1)
         const variables: SimulationVariableState[] = []
         sim.simulationData.forEach((entry) => {
-            if (!sim.isBlacklisted(entry)) {
+            if (matches && !sim.isBlacklisted(entry)) {
                 variables.push(this.variableState(entry, tick, firstTick))
             }
         })
-        const uri =
-            sim.phase === 'idle' && !sim.lastError ? this.diagrams.currentUri?.toString() ?? sim.modelUri : sim.modelUri
-        const model = uri ? path.basename(vscode.Uri.parse(uri).path) : undefined
         return {
-            phase: sim.phase,
-            playing: sim.play,
+            phase: matches ? sim.phase : 'idle',
+            canStart: !!uri && sim.phase !== 'starting' && sim.phase !== 'stopping',
+            playing: matches && sim.play,
             tick,
             firstTick,
             stepDelay: this.settings.get('simulationStepDelay'),
             showInternal: this.settings.get('showInternalVariables.enabled'),
-            model,
+            modelUri,
+            model: uri ? path.basename(uri.path) : undefined,
             variables,
-            error: sim.lastError,
+            error: matches ? sim.lastError : undefined,
         }
     }
 
