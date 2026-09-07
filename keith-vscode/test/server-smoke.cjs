@@ -5,14 +5,17 @@ const { pathToFileURL } = require('node:url')
 const { tmpdir } = require('node:os')
 const { spawn } = require('node:child_process')
 const { createMessageConnection, StreamMessageReader, StreamMessageWriter } = require('vscode-jsonrpc/node')
+const { readDataPool, inputValue } = require('./load-typescript.cjs')()('src/simulation/data-pool.ts')
 
 async function main() {
     const extension = path.resolve(__dirname, '..')
+    const serverDir = process.env.KIELER_SERVER_DIR ?? path.join(extension, 'server')
+    assert.ok(fs.existsSync(path.join(serverDir, 'kieler-language-server.jar')), 'The bundled language server JAR is required')
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-smoke-'))
     const fixture = path.join(workspace, 'audit.sctx')
     fs.copyFileSync(path.join(__dirname, 'fixtures/audit.sctx'), fixture)
     const uri = pathToFileURL(fixture).href
-    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', `${extension}/server/diagnostics.jar${path.delimiter}${extension}/server/jetty10/*${path.delimiter}${extension}/server/kieler-language-server.jar`, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: extension })
+    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', `${serverDir}/diagnostics.jar${path.delimiter}${serverDir}/jetty10/*${path.delimiter}${serverDir}/kieler-language-server.jar`, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: extension })
     const closed = new Promise((resolve) => server.once('close', resolve))
     let stderr = ''
     server.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-12000) })
@@ -54,19 +57,27 @@ async function main() {
             const initial = await started
             assert.equal(initial.successful, true, initial.error)
             assert.equal(typeof initial.dataPool.trigger, 'boolean')
+            assert.equal(initial.dataPool.timeout_update_vals ?? null, null)
+            const pool = readDataPool(initial.dataPool)
+            assert.equal(pool.get('timeout_update_vals').type, 'string')
+            assert.equal(pool.get('echoed').type, 'string')
+            assert.equal(inputValue(pool.get('timeout_update_vals').value, 'string'), '')
             for (const [index, trigger] of [true, false, true].entries()) {
+                const packet = index === 0 ? '' : `10,20,30,40,50,${index}\n`
                 const tick = waitFor('keith/simulation/didStep')
-                await connection.sendNotification('keith/simulation/step', { valuesForNextStep: { trigger }, simulationType: 'Manual' })
+                await connection.sendNotification('keith/simulation/step', { valuesForNextStep: { trigger, timeout_update_vals: packet }, simulationType: 'Manual' })
                 const data = await tick
                 assert.equal(data.successful, true, data.error)
                 assert.equal(data.values.trigger, trigger)
+                assert.equal(data.values.timeout_update_vals, packet)
+                if (index === 2) assert.equal(data.values.echoed, packet)
                 // The first SCCharts reaction enters the initial state.
                 assert.equal(data.values.result, index === 0 ? false : trigger)
             }
             const stopped = await connection.sendRequest('keith/simulation/stop')
             assert.equal(stopped.successful, true, stopped.message)
         }
-        console.log('Server smoke passed: compile, start, input changes, six ticks, stop, and restart.')
+        console.log('Server smoke passed: compile, start, boolean and uninitialized string inputs, six ticks, stop, and restart.')
     } finally {
         clearTimeout(watchdog)
         connection.dispose()
