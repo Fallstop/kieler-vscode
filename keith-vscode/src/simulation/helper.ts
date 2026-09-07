@@ -37,7 +37,7 @@ export function strMapToJson(strMap: Map<string, unknown>): string {
 
 /** The input that tells timed models how much time passes per tick; clocks only advance when it is set. */
 export function isTimeDelta(data: { id?: string; categories: string[] }): boolean {
-    return /^[#_]*deltaT$/i.test(data.id ?? '') || data.categories.includes('ticktime')
+    return /^[#_]*deltaT$/i.test(data.id ?? '')
 }
 
 /** Clocks and the time delta belong to the model author, whatever the compiler tagged them as. */
@@ -49,7 +49,7 @@ export function isInternal(data: SimulationData): boolean {
     if (isTimeRelated(data)) {
         return false
     }
-    return data.categories.includes('guard') || data.categories.includes('term')
+    return data.categories.includes('guard') || data.categories.includes('term') || data.categories.includes('ticktime')
 }
 
 export function reverse(array: unknown[]): unknown[] {
