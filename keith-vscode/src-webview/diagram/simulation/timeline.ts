@@ -22,14 +22,9 @@ import { isCompatibleInput } from '../../../src/simulation/input-value'
 import { formatValue, h, replaceChildren, sameValue } from './dom'
 import { NumberFormat, describeFormat, parseNumber } from './format'
 
-type GroupKey = 'time' | 'input' | 'output' | 'local' | 'internal'
+type GroupKey = 'input' | 'output' | 'local' | 'internal'
 
 const GROUPS: { key: GroupKey; title: string; hint: string }[] = [
-    {
-        key: 'time',
-        title: 'Time',
-        hint: 'Δt is how much time passes per tick; clocks in the model add it up. Not part of the chart’s interface.',
-    },
     {
         key: 'input',
         title: 'Inputs',
@@ -145,8 +140,8 @@ export class Timeline {
             h(
                 'td.kv-col-name',
                 { title: `${variable.id}${categories}` },
-                h('span.kv-name', {}, variable.timeDelta ? `Δt (${variable.label})` : variable.label),
-                isNumeric(variable) && !variable.timeDelta && this.formatButton(variable, format)
+                h('span.kv-name', {}, variable.label),
+                isNumeric(variable) && this.formatButton(variable, format)
             ),
             h(
                 `td.kv-col-next${variable.pending ? '.kv-pending' : ''}`,
@@ -283,9 +278,6 @@ export class Timeline {
 }
 
 function groupOf(variable: SimulationVariableState): GroupKey {
-    if (variable.timeDelta) {
-        return 'time'
-    }
     return variable.internal ? 'internal' : variable.role
 }
 

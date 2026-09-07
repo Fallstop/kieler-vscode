@@ -149,7 +149,8 @@ export class SimulationViewBridge implements vscode.Disposable {
         const firstTick = Math.max(1, tick - HISTORY_WINDOW + 1)
         const variables: SimulationVariableState[] = []
         sim.simulationData.forEach((entry) => {
-            if (!sim.isBlacklisted(entry)) {
+            // Δt is set to 1 at start and is not part of the chart's interface, so the trace skips it.
+            if (!sim.isBlacklisted(entry) && !isTimeDelta(entry)) {
                 variables.push(this.variableState(entry, tick, firstTick))
             }
         })
@@ -187,7 +188,6 @@ export class SimulationViewBridge implements vscode.Disposable {
             next: entry.input ? this.simulation.valuesForNextStep.get(entry.id) : undefined,
             pending: this.simulation.changedValuesForNextStep.has(entry.id),
             internal: this.simulation.isInternal(entry),
-            timeDelta: isTimeDelta(entry) || undefined,
         }
     }
 }
