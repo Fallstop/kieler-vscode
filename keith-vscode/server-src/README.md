@@ -1,0 +1,36 @@
+# Compiler diagnostic patch
+
+`npm run build:server` compiles these Java 11 sources against the bundled
+`server/kieler-language-server.jar` and writes `server/diagnostics.jar`.
+The extension puts that small JAR first on the classpath, ahead of the existing
+Jetty compatibility libraries and the unchanged language server. End users need
+only Java; building requires a JDK. A client-only checkout can still build without
+the untracked server JAR and uses legacy-message fallback diagnostics.
+
+`BuildPatch` uses the ASM already bundled in KIELER to add six hooks. It checks
+each target method signature and fails the build if a server update changes it:
+
+- Begin compilation: capture original Xtext ranges and stop on compiler errors.
+- EMF copies and explicit transformation trace calls: carry original ranges into
+  transformed objects, using weak keys so model objects can be collected.
+- Scheduler completion: compute strongly connected components over the same
+  dependency types used by the scheduler and return a short cycle witness.
+- Native compiler return: preserve actual file/line/column diagnostics and logs.
+- C assignment emission: associate emitted fragments with their original model ranges.
+
+`SnapshotDescription` retains the existing DTO methods and raw messages, and adds
+structured diagnostics. This is an additive protocol change. The patch does not
+change scheduling rules, generated C, or automatically repair model semantics.
+It does stop compilation after errors instead of emitting an incomplete executable.
+
+The bundled experimental tracing engine fails on the demo's Surface/Depth pass.
+These hooks observe copies and explicit origins without enabling that engine or
+guessing origins from variable names. Some generated objects have no explicit
+origin. In that case the UI retains a compiler-stage/generated-file diagnostic.
+Generated C assignments retain their original model locations. Embedded C is mapped
+through decoded string offsets; a unique simple array copy can also be matched to
+source. Unmapped expressions remain linked to generated C.
+
+Run `npm run test:server` for real-server coverage, including the full broken demo,
+the resulting array error, embedded C errors, and recovery to a working simulation.
+The upstream code and bundled classes use EPL-2.0; see the extension LICENSE.

@@ -66,6 +66,12 @@ export class Timeline {
         private readonly formats: FormatStore = { get: () => 'dec', cycle: () => undefined }
     ) {}
 
+    clear(): void {
+        this.edit = undefined
+        this.focusedControl = undefined
+        replaceChildren(this.el)
+    }
+
     render(state: SimulationViewState): void {
         const stickToEnd = this.el.scrollLeft + this.el.clientWidth >= this.el.scrollWidth - 40
         this.captureEdit()

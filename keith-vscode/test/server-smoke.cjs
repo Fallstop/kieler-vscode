@@ -12,7 +12,7 @@ async function main() {
     const fixture = path.join(workspace, 'audit.sctx')
     fs.copyFileSync(path.join(__dirname, 'fixtures/audit.sctx'), fixture)
     const uri = pathToFileURL(fixture).href
-    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', `${extension}/server/jetty10/*${path.delimiter}${extension}/server/kieler-language-server.jar`, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: extension })
+    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', `${extension}/server/diagnostics.jar${path.delimiter}${extension}/server/jetty10/*${path.delimiter}${extension}/server/kieler-language-server.jar`, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: extension })
     const closed = new Promise((resolve) => server.once('close', resolve))
     let stderr = ''
     server.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-12000) })

@@ -18,6 +18,8 @@
 import * as vscode from 'vscode'
 import { LanguageClient } from 'vscode-languageclient/node'
 import { Utils } from 'vscode-uri'
+import { CompilerDiagnostics } from './compiler-diagnostics'
+import { CompilerIssue } from './diagnostic-protocol'
 import { Settings } from '../constants'
 import { SettingsService } from '../settings'
 import {
@@ -53,6 +55,8 @@ export const compilationSystemsMessageType = 'keith/kicool/compilation-systems'
 export const diagramType = 'keith-diagram'
 
 export class CompilationDataProvider implements vscode.TreeDataProvider<SnapshotDescription> {
+    readonly diagnostics = new CompilerDiagnostics()
+
     editor: vscode.TextEditor | undefined = undefined
 
     requestedSystems = false
@@ -138,6 +142,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
     ) {
         // Output channel
         this.output = vscode.window.createOutputChannel('KIELER Compilation')
+        this.context.subscriptions.push(this.diagnostics, this.output)
 
         // TODO call treeview.reveal(item, {focus: true}); to reveal tree view after compilation finished
         // The item that is revealed should maybe be the last one. Also this provider may need access to the tree view.
@@ -533,9 +538,11 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         this.lastInvokedCompilation = command
         this.lastCompiledUri = uri
         try {
+            await this.diagnostics?.begin(uri)
             await this.executeCompile(command, inplace, showResultingModel, snapshot, uri)
         } catch (error) {
             this.compiling = false
+            this.diagnostics?.finish(uri, [[{ name: 'Language server', index: 0, errors: [String(error)] }]], false)
             this.compilationFinishedEmitter.fire(false)
             throw error
         }
@@ -586,6 +593,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         this.lengthMap.set(uri as string, length)
         this.indexMap.set(uri as string, length - 1)
         if (finished) {
+            const report = this.diagnostics?.finish(uri, results.files, this.cancellingCompilation)
             let index = 0
             let errorOccurred = false
             this.compiling = false
@@ -620,7 +628,9 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                     this._onDidChangeTreeData.fire(element)
                 })
             })
-            this.compilationFinishedEmitter.fire(!errorOccurred && !this.cancellingCompilation)
+            this.compilationFinishedEmitter.fire(
+                !errorOccurred && !this.cancellingCompilation && report?.status !== 'stale'
+            )
 
             this.endTime = Date.now()
             // Set finished bar if the currentIndex of the processor is the maxIndex the compilation was not canceled TODO
@@ -629,10 +639,20 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                     ? `$(check) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
                     : `$(times) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
             this.compilation.tooltip = currentIndex >= maxIndex ? 'Compilation finished' : 'Compilation stopped'
-            if (errorOccurred) {
-                vscode.window.showErrorMessage(
-                    `An error occurred during compilation. Check the output channel for details.${errorString}`
-                )
+            if (errorOccurred && report?.status !== 'stale') {
+                const first = report?.issues.find((issue) => issue.severity === 'error')
+                vscode.window
+                    .showErrorMessage(
+                        first
+                            ? `${first.stage}: ${first.message}`
+                            : 'Compilation failed. Open Problems or the compiler output for details.',
+                        'Problems',
+                        'Compiler output'
+                    )
+                    .then((choice) => {
+                        if (choice === 'Problems') vscode.commands.executeCommand('workbench.actions.view.problems')
+                        if (choice === 'Compiler output') this.output.show()
+                    })
             }
         } else {
             // Set progress bar for compilation TODO
@@ -667,6 +687,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         this.cancellingCompilation = false
         if (success) {
             this.compiling = false
+            this.diagnostics?.cancel(this.lastCompiledUri)
         }
     }
 
@@ -881,6 +902,8 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
 }
 
 export class SnapshotDescription extends vscode.TreeItem {
+    diagnostics?: CompilerIssue[]
+
     constructor(
         public label: string,
         private version: string,

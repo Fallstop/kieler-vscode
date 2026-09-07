@@ -24,6 +24,7 @@ import { KeithErrorHandler } from './error-handler'
 import { DiagramController } from './diagram/diagram-controller'
 import { REQUEST_CS } from './kico/commands'
 import { CompilationDataProvider } from './kico/compilation-data-provider'
+import { DiagnosticBridge } from './kico/diagnostic-bridge'
 import { ModelCheckerDataProvider } from './model-checker/model-checker-data-provider'
 import { registerStpaCommands } from './pasta/stpa-interaction'
 import { handlePerformAction, PerformActionAction, performActionKind } from './perform-action-handler'
@@ -86,10 +87,11 @@ function createServerOptions(context: vscode.ExtensionContext): ServerOptions {
     // visualization server was compiled against Jetty 10. Putting Jetty 10 first on the classpath
     // shadows the bundled classes so the server on port 5010 can start.
     const jettyPath = context.asAbsolutePath(`server/jetty10/*`)
+    const diagnosticsPath = context.asAbsolutePath('server/diagnostics.jar')
     const args = [
         '-Djava.awt.headless=true',
         '-cp',
-        `${jettyPath}${path.delimiter}${lsPath}`,
+        `${diagnosticsPath}${path.delimiter}${jettyPath}${path.delimiter}${lsPath}`,
         'de.cau.cs.kieler.language.server.LanguageServer',
     ]
 
@@ -162,6 +164,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(settingsService)
 
     const compilationDataProvider = new CompilationDataProvider(lsClient, context, settingsService)
+    context.subscriptions.push(
+        new DiagnosticBridge(compilationDataProvider.diagnostics, diagrams, (uri, index) =>
+            compilationDataProvider.show(uri, index)
+        )
+    )
 
     // Register and start kico view
     context.subscriptions.push(
@@ -205,6 +212,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(
         lsClient.onDidChangeState((event) => {
             if (event.newState === State.Stopped) {
+                compilationDataProvider.diagnostics.reset()
                 compilationDataProvider.compiling = false
                 compilationDataProvider.lastCompiledUri = ''
                 compilationDataProvider.compilationFinishedEmitter.fire(false)

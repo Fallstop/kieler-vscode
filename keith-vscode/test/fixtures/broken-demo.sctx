@@ -1,0 +1,270 @@
+#hostcode-c "
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+
+#define NUM_TIMEOUTS 6
+
+static char last_packet[256] = {0};
+
+int getTimeouts(const char* input, int* result) {
+
+    if (input == NULL) {
+        return 2;
+    }
+
+    // no change in string; do nothing
+    if (strcmp(input, last_packet) == 0) return 2;
+
+    // empty string; do nothing
+    if (input[0] == '\\0') return 2;
+
+    char buf[256];
+    strncpy(buf, input, sizeof(buf) - 1);
+
+    buf[sizeof(buf) - 1] = '\\0';  // ensure the string is null-terminated
+
+    // check if \n exists in the input
+    char* endn = strchr(buf, '\\n');
+    if (endn == NULL) {
+        return 1;
+    } else {
+        *endn = '\\0';
+    }
+
+    // check for \r just in case
+
+    char* endr = strchr(buf, '\\r');
+    if (endr != NULL) {
+        *endr = '\\0';
+    }
+
+    int i = 0;
+    char* token = strtok(buf, \",\");
+
+    while (token != NULL) {
+        if (i >= NUM_TIMEOUTS) {
+            // too many values
+            return 1;
+        }
+
+        // validate token is a well-formed non-negative integer
+        char* endptr;
+        long val = strtol(token, &endptr, 10);
+
+        if (endptr == token || *endptr != '\\0') {
+            // token had no digits, or trailing junk after the number
+            return 1;
+        }
+        if (val < 0 || val > 9999) {
+            // reject negative timeouts or timeouts > 9999
+            return 1;
+        }
+
+        result[i++] = (int) val;
+        token = strtok(NULL, \",\");
+    }
+
+    if (i != NUM_TIMEOUTS) {
+        // too few values
+        return 1;
+    }
+    strncpy(last_packet, input, sizeof(last_packet) - 1);
+    return 0;
+}
+"
+
+@ClocksUseSD
+
+scchart timeout_controller_A {
+    extern @C "getTimeouts" getTimeouts
+
+    input bool NS_raised
+    input bool EW_raised
+    input string timeout_update_vals
+
+    // traffic lights output on LEDs
+    // bit 5: EW-R
+    // bit 4: EW-Y
+    // bit 3: EW-G
+    // bit 2: NS-R
+    // bit 1: NS-Y
+    // bit 0: NS-G
+    output bool leds[6] = {0, 0, 0, 0, 0, 0}
+
+    // pedestrian lights
+    // bit 1: NS
+    // bit 0: EW
+    output bool pedestrian_leds[2] = {0, 0}
+
+    // shared pedestrian request variables & clear signals
+    bool NS_ped_request = false
+    bool EW_ped_request = false
+    signal NS_clear
+    signal EW_clear
+
+    // configurable timeout constants
+    // bits [0..2] NS {G, Y, R}
+    // bits [3..5] EW {G, Y, R}
+    int timeout_vals[6] = {10,3,5,6,3,3}
+    int timeout_buf[6] = {0, 0, 0, 0, 0, 0}
+    bool timeout_update = false
+
+    int t_walk = 4 // pedestrian walk time
+
+    clock c         // vehicle light clock
+    clock c_walk    // pedestrian walk clock
+
+    region traffic_controller {
+        initial state NS_Phase {
+            initial state green_early {
+                entry do
+                    c = 0;
+                    leds = {1, 0, 0, 0, 0, 1};
+                    pedestrian_leds = {0, 0}
+            }
+            if NS_ped_request go to green_walk
+            // latest time to allow walk in NS green
+            if (c >= timeout_vals[0] - t_walk) go to green_late
+
+            state green_late
+            if (c >= timeout_vals[0]) go to yellow
+
+            state green_walk {
+                entry do
+                    c_walk = 0;
+                    pedestrian_leds = {1, 0}
+            }
+            if (c_walk >= t_walk) do
+                NS_clear;
+                pedestrian_leds = {0, 0}
+            go to green_rest
+
+            // for safety, go to yellow if vehicle green expires
+            if (c >= timeout_vals[0]) do
+                NS_clear;
+                pedestrian_leds = {0, 0}
+            go to yellow
+
+            state green_rest {
+                entry do pedestrian_leds = {0, 0}
+            }
+            if (c >= timeout_vals[0]) go to yellow
+
+            state yellow {
+                entry do
+                    c = 0;
+                    leds = {1, 0, 0, 0, 1, 0}
+            }
+            if (c >= timeout_vals[1]) go to red
+
+            state red {
+                entry do
+                    c = 0;
+                    leds = {1, 0, 0, 1, 0, 0}
+                during if timeout_update do  // if flag then load new values
+                    // idk if full array assignment is valid like this... 
+                    // but surely KIELER is goated and lets this slide
+                    timeout_vals = timeout_buf;
+                    timeout_update = false;
+                    // reset the clock to ensure that
+                    // we do not cut the red early
+                    c = 0
+            }
+            // only transition when red and timer is completed
+            if (c >= timeout_vals[2]) go to ready
+
+            final state ready
+        }
+        join to EW_Phase
+
+        state EW_Phase {
+            initial state green_early {
+                entry do
+                    c = 0;
+                    leds = {0, 0, 1, 1, 0, 0};
+                    pedestrian_leds = {0, 0}
+            }
+            if EW_ped_request go to green_walk
+            // latest time to allow walk in EW green
+            if (c >= timeout_vals[3] - t_walk) go to green_late
+
+            state green_late
+            if (c >= timeout_vals[3]) go to yellow
+
+            state green_walk {
+                entry do
+                    c_walk = 0;
+                    pedestrian_leds = {0, 1}
+            }
+            if (c_walk >= t_walk) do
+                EW_clear;
+                pedestrian_leds = {0, 0}
+            go to green_rest
+
+            // for safety, go to yellow if vehicle green expires
+            if (c >= timeout_vals[3]) do
+                EW_clear;
+                pedestrian_leds = {0, 0}
+            go to yellow
+
+            state green_rest {
+                entry do pedestrian_leds = {0, 0}
+            }
+            if (c >= timeout_vals[3]) go to yellow
+
+            state yellow {
+                entry do
+                    c = 0;
+                    leds = {0, 1, 0, 1, 0, 0}
+            }
+            if (c >= timeout_vals[4]) go to red
+
+            state red {
+                entry do
+                    c = 0;
+                    leds = {1, 0, 0, 1, 0, 0}
+            }
+            // only transition when red and timer is completed
+            if (c >= timeout_vals[5]) go to ready
+
+            final state ready
+        }
+        join to NS_Phase
+    }
+
+    // latch for NS pedestrians
+    region NS_pedestrian_latch {
+        initial state unraised
+        if NS_raised do NS_ped_request = true go to raised
+
+        state raised
+        if NS_clear do NS_ped_request = false go to unraised
+    }
+
+    // latch for EW pedestrians
+    region EW_pedestrian_latch {
+        initial state unraised
+        if EW_raised do EW_ped_request = true go to raised
+
+        state raised
+        if EW_clear do EW_ped_request = false go to unraised
+    }
+
+    // latch for timeout values update
+    region timeout_latch {
+        // init as initially no change since otherwise it will update to a null string
+        // this should be fine but better safe than sorry
+        int e = 2
+
+        initial state listening {
+            immediate during do e = getTimeouts(timeout_update_vals, timeout_buf)
+        }
+        if e == 0 do timeout_update = true go to confirmation   // set flag for lights
+
+        // wait for confirmation of update before accepting new set of values
+        state confirmation
+        if !timeout_update go to listening
+
+    }
+}

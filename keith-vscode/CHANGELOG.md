@@ -6,6 +6,22 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-08
+
+- Compilation failures appear in the diagram preview and VS Code Problems, with
+  source links and related locations. Errors stay with their model and become stale
+  when the source changes.
+- Scheduler failures show one short dependency cycle per conflict, explain the
+  required order, and link to the participating source operations and diagram.
+  Compilation stops after errors, before an incomplete executable can be emitted.
+- GCC and Clang diagnostics link to generated C and, where provenance is available,
+  the original SCCharts assignment or embedded host C. Full compiler output remains
+  available under Technical details.
+- A quick fix expands compatible fixed-size array assignments into element copies.
+  Scheduling conflicts offer timing guidance rather than automatic semantic changes.
+- Preview controls and traces follow the displayed file; switching files clears
+  unfinished edits and prevents controlling another model's simulation.
+
 ## [0.4.0] - 2026-09-07
 
 - The diagram preview tab (`[Preview] model.sctx`) now carries the whole simulation. Restart / Step /

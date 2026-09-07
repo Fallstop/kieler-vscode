@@ -22,10 +22,11 @@ import '@kieler/klighd-core/styles/main.css'
 import 'sprotty-vscode-webview/css/sprotty-vscode.css'
 import './main.css'
 import './simulation/simulation.css'
+import './diagnostics/diagnostics.css'
 
 import { bindServices, createKlighdDiagramContainer } from '@kieler/klighd-core'
 import { Container } from 'inversify'
-import { KeyTool } from 'sprotty'
+import { IActionDispatcher, KeyTool, TYPES } from 'sprotty'
 import { ActionMessage, isActionMessage } from 'sprotty-protocol'
 import {
     SprottyDiagramIdentifier,
@@ -39,6 +40,8 @@ import { KlighdDiagramWidget } from './klighd-widget'
 import { MessageConnection } from './message-connection'
 import { MessagePersistenceStorage } from './persistence-storage'
 import { SimulationView } from './simulation/view'
+import { DiagnosticView } from './diagnostics/view'
+import { DiagnosticHighlighter } from './diagnostics/highlight'
 /* global sessionStorage, window */
 
 /** Uses `klighd-core` and {@link SprottyStarter} to create a diagram container in a webview. */
@@ -54,15 +57,22 @@ export class KLighDSprottyStarter extends SprottyStarter {
     /** Simulation controls and trace wrapped around the diagram. */
     private readonly simulationView: SimulationView
 
+    private readonly diagnosticView: DiagnosticView
+
+    private readonly diagnosticHighlighter: DiagnosticHighlighter
+
     constructor() {
         super()
         window.addEventListener('message', this.queueActionMessage)
         this.simulationView = new SimulationView(this.messenger)
+        this.diagnosticView = new DiagnosticView(this.messenger)
+        this.diagnosticHighlighter = new DiagnosticHighlighter(this.messenger)
     }
 
     override start(): void {
         super.start()
         this.simulationView.connect()
+        this.diagnosticView.connect()
     }
 
     /** Queues an action message to be replayed for the diagram container */
@@ -89,6 +99,8 @@ export class KLighDSprottyStarter extends SprottyStarter {
         const persistenceStorage = new MessagePersistenceStorage(this.messenger)
         const container = createKlighdDiagramContainer(diagramIdentifier.clientId)
         bindServices(container, { connection, sessionStorage, persistenceStorage })
+        this.diagnosticHighlighter.connect(() => container.get<IActionDispatcher>(TYPES.IActionDispatcher))
+        connection.onMessageReceived((message) => this.diagnosticHighlighter.accept(message.action))
 
         // Send stored actions to the container, which is no able to receive them
         this.replayCapturedActionMessages()

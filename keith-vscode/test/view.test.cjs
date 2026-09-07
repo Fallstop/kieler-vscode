@@ -16,7 +16,8 @@ beforeEach(() => {
 afterEach(() => dom.window.close())
 
 const input = (next = 0) => ({ id: 'input', label: 'Input', role: 'input', history: [], next, pending: false, internal: false, categories: [] })
-const state = (patch = {}) => ({ phase: 'running', tick: 0, firstTick: 1, playing: false, stepDelay: 200, showInternal: false, variables: [input()], ...patch })
+const modelUri = 'file:///models/clock.sctx'
+const state = (patch = {}) => ({ phase: 'running', canStart: true, modelUri, tick: 0, firstTick: 1, playing: false, stepDelay: 200, showInternal: false, variables: [input()], ...patch })
 
 test('numeric parsing rejects partial binary values and non-finite numbers', () => {
     const { parseNumber, formatNumber } = load('src-webview/diagram/simulation/format.ts')
@@ -132,8 +133,53 @@ test('Space respects buttons and selectors, ignores key repeats, and hidden view
     key(document.body, { repeat: true })
     assert.equal(sent.length, 0)
     key(document.body)
-    assert.deepEqual(sent.pop(), { kind: 'step' })
+    assert.deepEqual(sent.pop(), { kind: 'step', modelUri })
     Object.defineProperty(document, 'hidden', { value: false, configurable: true })
     document.dispatchEvent(new window.Event('visibilitychange'))
-    assert.deepEqual(sent.pop(), { kind: 'requestState' })
+    assert.deepEqual(sent.pop(), { kind: 'requestState', modelUri })
+})
+
+test('switching previews clears the old trace, error, and unfinished input edit', () => {
+    const { SimulationView } = load('src-webview/diagram/simulation/view.ts')
+    const sent = []
+    let update
+    new SimulationView({ onNotification: (_, handler) => { update = handler }, sendNotification: (_, __, command) => sent.push(command) })
+    update(state({ model: 'clock.sctx', variables: [input(2)] }))
+    const editor = document.querySelector('.kv-input')
+    editor.focus()
+    editor.value = '999'
+    const nextUri = 'file:///other/clock.sctx'
+    update(state({ phase: 'idle', modelUri: nextUri, model: 'clock.sctx', variables: [] }))
+    assert.equal(document.querySelector('.kv-drawer').hidden, true)
+    assert.equal(document.querySelector('.kv-input'), null)
+    document.querySelector('[aria-label="Simulate…"]').click()
+    assert.deepEqual(sent, [{ kind: 'start', modelUri: nextUri }])
+    update(state({ model: 'clock.sctx', variables: [input(2)] }))
+    assert.equal(document.querySelector('.kv-input').value, '2')
+    update(state({ phase: 'idle', error: 'Compilation failed' }))
+    assert.match(document.querySelector('[role="alert"]').textContent, /Compilation failed/)
+    update(state({ phase: 'idle', modelUri: nextUri, model: 'other.sctx', variables: [] }))
+    assert.equal(document.querySelector('[role="alert"]'), null)
+    assert.equal(document.querySelector('.kv-model-name').textContent, 'other.sctx')
+})
+
+test('a direct switch between running models does not copy edits for shared variable IDs', () => {
+    const { SimulationView } = load('src-webview/diagram/simulation/view.ts')
+    let update
+    new SimulationView({ onNotification: (_, handler) => { update = handler }, sendNotification() {} })
+    update(state())
+    const editor = document.querySelector('.kv-input')
+    editor.focus()
+    editor.value = '999'
+    update(state({ modelUri: 'file:///other/clock.sctx', variables: [input(5)] }))
+    assert.equal(document.querySelector('.kv-input').value, '5')
+})
+
+test('Simulate is disabled until the host can start another run', () => {
+    const { Toolbar } = load('src-webview/diagram/simulation/toolbar.ts')
+    const toolbar = new Toolbar({ send() {}, toggleDrawer() {}, drawerOpen: () => true })
+    toolbar.render(state({ phase: 'idle', canStart: false }))
+    assert.equal(toolbar.el.querySelector('[aria-label="Simulate…"]').disabled, true)
+    toolbar.render(state({ phase: 'idle', canStart: true }))
+    assert.equal(toolbar.el.querySelector('[aria-label="Simulate…"]').disabled, false)
 })

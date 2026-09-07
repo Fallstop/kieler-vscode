@@ -14,17 +14,24 @@ Adds language support for various languages that are part of the
 -   Support for Estrel
 -   Support for Lustre
 
-Further, this extension uses `kieler.klighd-vscode` to add diagram visualization for the supported
-languages.
+Diagram visualization and simulation are included in this extension. Open a model's
+preview to simulate, step through ticks, edit inputs, and inspect its variable trace.
+
+Compilation failures appear above the diagram and in VS Code Problems. Scheduler
+conflicts link to the participating source operations and explain their circular
+ordering. C compiler errors link to generated code and to SCCharts when their origin
+is known. Use **Technical details** for the original output or **Compiler stage** to
+inspect the failed transformation.
+
+Source edits mark old diagnostics as stale until the next compilation. Compatible
+fixed-size array assignments offer a **Copy array elements individually** quick fix
+in the editor. Timing changes needed to resolve scheduler conflicts remain explicit
+modeling decisions.
 
 ## Requirements
 
-This extension requires an installation of Java 11 to be available on your PATH.
+This extension requires Java 11 or newer on your PATH. C simulation also requires
+`gcc` on the language server's PATH (Apple Clang's `gcc` command works on macOS).
 
-## Known Issues
-
--   `keith-vscode` has a dependency on `klighd-vscode` to support diagrams. However, currently only
-    one extension with a dependency on `klighd-vscode` can be active at the same time. If this is a
-    problem, close all files that are not supported by this extension and reload the VS Code window.
-    Afterwards, only open files that are supported by this extension so no other klighd-vscode`
-    dependent extension is activated.
+Some transformed operations have no source provenance. Those diagnostics retain
+their compiler stage or generated-file location instead of guessing a source line.

@@ -1,0 +1,118 @@
+.kd-panel {
+    flex: 0 1 auto;
+    max-height: 45vh;
+    overflow: auto;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--kv-border);
+    border-left: 3px solid var(--vscode-editorError-foreground, #f48771);
+    background: var(--kv-surface);
+    font: inherit;
+}
+.kd-panel[hidden] {
+    display: none;
+}
+.kd-heading,
+.kd-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.kd-heading {
+    justify-content: space-between;
+}
+.kd-heading strong {
+    font-weight: 600;
+}
+.kd-issue + .kd-issue {
+    border-top: 1px solid var(--kv-border);
+    margin-top: 12px;
+    padding-top: 8px;
+}
+.kd-message {
+    margin: 8px 0;
+}
+.kd-sources {
+    display: flex;
+    gap: 4px 12px;
+    flex-wrap: wrap;
+}
+.kd-sources .kd-button {
+    font-family: var(--kv-mono);
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.kd-button {
+    background: transparent;
+    border: 0;
+    padding: 3px 0;
+    color: var(--vscode-textLink-foreground, #3794ff);
+    font: inherit;
+    cursor: pointer;
+}
+.kd-button:hover {
+    text-decoration: underline;
+}
+.kd-button:disabled {
+    color: var(--kv-muted);
+    cursor: default;
+    text-decoration: none;
+}
+.kd-button:focus-visible,
+.kd-panel summary:focus-visible {
+    outline: 1px solid var(--kv-accent);
+    outline-offset: 3px;
+}
+.kd-panel summary {
+    cursor: pointer;
+    padding: 7px 0;
+    width: fit-content;
+}
+.kd-explanation {
+    margin-top: 5px;
+}
+.kd-cycle {
+    padding: 0 0 0 24px;
+    margin: 8px 0;
+    border-left: 2px solid var(--vscode-editorError-foreground, #f48771);
+}
+.kd-cycle li {
+    padding: 5px 8px;
+}
+.kd-order {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.kd-order code {
+    font-family: var(--kv-mono);
+    overflow-wrap: anywhere;
+}
+.kd-before,
+.kd-muted {
+    color: var(--kv-muted);
+}
+.kd-muted {
+    margin: 5px 0;
+}
+.kd-loop {
+    color: var(--vscode-editorError-foreground, #f48771);
+    margin: 6px 0;
+}
+.kd-hint {
+    line-height: 1.55;
+    max-width: 85ch;
+}
+.kd-actions {
+    margin-top: 5px;
+}
+.kd-stale {
+    border-left-color: var(--vscode-editorWarning-foreground, #cca700);
+}
+.kd-warnings {
+    color: var(--kv-muted);
+}
+.kd-warnings article {
+    color: var(--vscode-foreground);
+}
