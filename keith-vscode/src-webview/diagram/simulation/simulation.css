@@ -530,6 +530,14 @@ body .sidebar {
     background: var(--vscode-list-hoverBackground);
 }
 
+/* Sticky cells must stay opaque under the hover tint, or scrolled-away ticks show through them. */
+.kv-row:hover td.kv-col-name,
+.kv-row:hover td.kv-col-next {
+    background:
+        linear-gradient(var(--vscode-list-hoverBackground, transparent), var(--vscode-list-hoverBackground, transparent)),
+        var(--kv-surface);
+}
+
 .kv-name {
     font-family: var(--vscode-font-family);
 }
