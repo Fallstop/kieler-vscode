@@ -18,6 +18,7 @@ public final class BuildPatch implements Opcodes {
             patch(jar, args[1], "org/eclipse/emf/ecore/util/EcoreUtil$Copier", "copy", "(Lorg/eclipse/emf/ecore/EObject;)Lorg/eclipse/emf/ecore/EObject;", 3);
             patch(jar, args[1], "kicool/kitt/tracing/TransformationTracing", "trace", "(Lorg/eclipse/emf/ecore/EObject;Lorg/eclipse/emf/ecore/EObject;)Lorg/eclipse/emf/ecore/EObject;", 4);
             patch(jar, args[1], "scg/processors/codegen/c/CCodeGeneratorLogicModule", "serializeToCode", "(L" + BASE + "scg/Assignment;IL" + BASE + "scg/processors/codegen/c/CCodeGeneratorStructModule;L" + BASE + "scg/processors/codegen/c/CCodeSerializeHRExtensions;)V", 5);
+            patch(jar, args[1], "simulation/processor/CSimulationTemplateGenerator", "generateTemplate", "()L" + BASE + "kicool/compilation/CodeContainer;", 6);
         }
     }
 
@@ -67,6 +68,9 @@ public final class BuildPatch implements Opcodes {
                             visitVarInsn(ALOAD, 0);
                             visitVarInsn(ALOAD, 1);
                             visitMethodInsn(INVOKESTATIC, "org/kieler/vscode/diagnostics/GeneratedTrace", "end", "(L" + BASE + "kicool/compilation/codegen/CodeGeneratorModule;Lorg/eclipse/emf/ecore/EObject;)V", false);
+                        } else if (kind == 6 && opcode == ARETURN) {
+                            visitInsn(DUP);
+                            visitMethodInsn(INVOKESTATIC, "org/kieler/vscode/diagnostics/SimulationStrings", "retain", "(L" + BASE + "kicool/compilation/CodeContainer;)V", false);
                         }
                         super.visitInsn(opcode);
                     }

@@ -7,7 +7,7 @@ Jetty compatibility libraries and the unchanged language server. End users need
 only Java; building requires a JDK. A client-only checkout can still build without
 the untracked server JAR and uses legacy-message fallback diagnostics.
 
-`BuildPatch` uses the ASM already bundled in KIELER to add six hooks. It checks
+`BuildPatch` uses the ASM already bundled in KIELER to add seven hooks. It checks
 each target method signature and fails the build if a server update changes it:
 
 - Begin compilation: capture original Xtext ranges and stop on compiler errors.
@@ -17,10 +17,14 @@ each target method signature and fails the build if a server update changes it:
   dependency types used by the scheduler and return a short cycle witness.
 - Native compiler return: preserve actual file/line/column diagnostics and logs.
 - C assignment emission: associate emitted fragments with their original model ranges.
+- C simulation template: retain incoming strings beyond their JSON message's lifetime.
+  Equal strings are reused per model slot; distinct values stay alive until simulation
+  exit because other model variables or host C can retain their pointers across ticks.
 
 `SnapshotDescription` retains the existing DTO methods and raw messages, and adds
 structured diagnostics. This is an additive protocol change. The patch does not
-change scheduling rules, generated C, or automatically repair model semantics.
+change scheduling rules or automatically repair model semantics. The simulation
+wrapper owns incoming strings to prevent dangling pointers; generated model C is unchanged.
 It does stop compilation after errors instead of emitting an incomplete executable.
 
 The bundled experimental tracing engine fails on the demo's Surface/Depth pass.

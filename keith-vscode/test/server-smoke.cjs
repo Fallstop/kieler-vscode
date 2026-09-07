@@ -62,28 +62,33 @@ async function main() {
             assert.equal(pool.get('timeout_update_vals').type, 'string')
             assert.equal(pool.get('echoed').type, 'string')
             assert.equal(inputValue(pool.get('timeout_update_vals').value, 'string'), '')
-            for (const [index, trigger] of [true, false, true].entries()) {
-                const packet = index === 0 ? '' : `10,20,30,40,50,${index}\n`
+            const triggers = [true, false, true, true, false, true]
+            const packets = ['', '10,20,30,40,50,60\n', 'é "quoted" \\ input\n', 'changed while output retains its old string', '', 'final']
+            let echoed = null
+            for (const [index, trigger] of triggers.entries()) {
+                const packet = packets[index]
                 const tick = waitFor('keith/simulation/didStep')
                 await connection.sendNotification('keith/simulation/step', { valuesForNextStep: { trigger, timeout_update_vals: packet }, simulationType: 'Manual' })
                 const data = await tick
                 assert.equal(data.successful, true, data.error)
                 assert.equal(data.values.trigger, trigger)
-                assert.equal(data.values.timeout_update_vals, packet)
-                if (index === 2) assert.equal(data.values.echoed, packet)
+                assert.equal(data.values.timeout_update_vals, packet, JSON.stringify(data))
+                if (index === 2 || index === 5) echoed = packet
+                assert.equal(data.values.echoed ?? null, echoed)
                 // The first SCCharts reaction enters the initial state.
                 assert.equal(data.values.result, index === 0 ? false : trigger)
             }
             const stopped = await connection.sendRequest('keith/simulation/stop')
             assert.equal(stopped.successful, true, stopped.message)
         }
-        console.log('Server smoke passed: compile, start, boolean and uninitialized string inputs, six ticks, stop, and restart.')
+        console.log('Server smoke passed: compile, start, empty and escaped string inputs, retained outputs, twelve ticks, stop, and restart.')
     } finally {
         clearTimeout(watchdog)
         connection.dispose()
         server.kill()
         await closed
-        fs.rmSync(workspace, { recursive: true, force: true })
+        if (process.env.KIELER_KEEP_TEST_OUTPUT) console.log(`Test output: ${workspace}`)
+        else fs.rmSync(workspace, { recursive: true, force: true })
     }
 }
 main().catch((error) => { console.error(error); process.exitCode = 1 })

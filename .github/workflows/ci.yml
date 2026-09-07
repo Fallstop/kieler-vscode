@@ -1,5 +1,4 @@
 # CI workflow used for code quality checks and to ensure that a PR can be built.
-# Future tests might also be executed by this workflow.
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
 
 name: ci
@@ -26,6 +25,9 @@ jobs:
               with:
                   node-version: 24.x
             - run: yarn
+            - run: yarn workspace keith-vscode test
+            - run: yarn tsc --noEmit -p keith-vscode/tsconfig.json
+            - run: yarn tsc --noEmit -p keith-vscode/tsconfig.webview.json
             - run: yarn package
             - run: yarn lint
 

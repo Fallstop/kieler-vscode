@@ -24,5 +24,7 @@ function run(command, args) {
 }
 run('javac', ['--release', '11', '-cp', server, '-d', output, ...sources(path.join(root, 'server-src'))])
 run('java', ['-cp', `${output}${path.delimiter}${server}`, 'org.kieler.vscode.diagnostics.BuildPatch', server, output])
+const helper = 'org/kieler/vscode/diagnostics/simulation-strings.c'
+fs.copyFileSync(path.join(root, 'server-src', helper), path.join(output, helper))
 run('jar', ['cf', path.join(root, 'server/diagnostics.jar'), '-C', output, '.'])
 console.log('Built server/diagnostics.jar')

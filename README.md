@@ -4,20 +4,20 @@ This monorepo is the home of the KIELER VS Code project. It mainly consists of a
 
 ## Packages
 
--   [keith-vscode](./packages/keith-vscode): VS Code extension that adds support for multiple KIELER
+-   [keith-vscode](./keith-vscode): VS Code extension that adds support for multiple KIELER
     languages in VS Code.
 
 ## Requirements
 
-Development of this project requires [Node.js _v16.x_](https://nodejs.org) and
+Development of this project requires [Node.js _v24.x_](https://nodejs.org) and
 [yarn _v1.x_](https://classic.yarnpkg.com/). Further, language server jars, named
 `kieler-language-server.jar`, have to placed in the `keith-vscode/server` folder to develop
 the VS Code extension. The latest jars can be downloaded
 [here](https://rtsys.informatik.uni-kiel.de/~kieler/files/nightly/sccharts/ls/).
 
-The `keith-vscode` extension has a dependency on the
-[klighd-vscode](https://github.com/kieler/klighd-vscode) to add diagram support. You have to install
-the extension locally if VS Code is not able to install the dependency automatically.
+Diagram support is included. Building the bundled server diagnostic patch requires
+a JDK 11 or newer. See [the patch documentation](keith-vscode/server-src/README.md)
+and [test instructions](keith-vscode/test/README.md).
 
 ## Scripts
 

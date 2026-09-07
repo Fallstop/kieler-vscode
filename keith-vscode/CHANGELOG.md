@@ -21,6 +21,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   Scheduling conflicts offer timing guidance rather than automatic semantic changes.
 - Preview controls and traces follow the displayed file; switching files clears
   unfinished edits and prevents controlling another model's simulation.
+- Uninitialized string inputs remain editable. The C simulation wrapper retains
+  incoming strings so empty inputs and values copied into outputs survive later ticks.
 
 ## [0.4.0] - 2026-09-07
 
