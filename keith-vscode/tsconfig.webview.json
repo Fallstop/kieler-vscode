@@ -1,0 +1,11 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "Node16",
+        "moduleResolution": "Node16",
+        "rootDir": ".",
+        "declaration": false,
+        "noEmit": false
+    },
+    "include": ["src-webview/diagram", "src/types", "src/diagram/storage/messages.ts", "src/simulation/protocol.ts"]
+}

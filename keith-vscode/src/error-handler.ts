@@ -15,27 +15,51 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-import { window } from 'vscode'
-import { CloseHandlerResult, ErrorHandler, ErrorHandlerResult, Message } from 'vscode-languageclient'
+import { commands, window } from 'vscode'
+import {
+    CloseAction,
+    CloseHandlerResult,
+    ErrorAction,
+    ErrorHandler,
+    ErrorHandlerResult,
+    Message,
+} from 'vscode-languageclient'
+
+const RESTART = 'Restart KIELER language server'
+const RESTART_COMMAND = 'keith-vscode.restart-language-server'
 
 /**
- * Simple LS connection error handling that informs the user about encountered
- * errors.
+ * Reports language server connection problems. The default handler restarts a crashed server by
+ * itself, so the user is only bothered when it gives up, and then gets a button to restart.
  */
 export class KeithErrorHandler implements ErrorHandler {
     constructor(private defaultHandler: ErrorHandler) {}
 
-    error(error: Error, message: Message, count: number): ErrorHandlerResult | Promise<ErrorHandlerResult> {
-        window.showErrorMessage('Connection to KIELER Language Server produced an error!')
+    async error(error: Error, message: Message | undefined, count: number | undefined): Promise<ErrorHandlerResult> {
         // eslint-disable-next-line no-console
-        console.error(error)
-
-        return this.defaultHandler.error(error, message, count)
+        console.error('KIELER language server connection error', error)
+        const result = await this.defaultHandler.error(error, message, count)
+        if (result.action === ErrorAction.Shutdown) {
+            this.offerRestart('The connection to the KIELER language server failed repeatedly and was shut down.')
+        }
+        return result
     }
 
-    closed(): CloseHandlerResult | Promise<CloseHandlerResult> {
-        window.showErrorMessage('Connection to KIELER Language Server got closed!')
+    async closed(): Promise<CloseHandlerResult> {
+        const result = await this.defaultHandler.closed()
+        if (result.action === CloseAction.DoNotRestart) {
+            this.offerRestart('The KIELER language server stopped and was not restarted automatically.')
+        } else {
+            window.setStatusBarMessage('$(sync~spin) KIELER language server restarting...', 5000)
+        }
+        return { ...result, handled: true }
+    }
 
-        return this.defaultHandler.closed()
+    private offerRestart(text: string): void {
+        window.showErrorMessage(text, RESTART).then((choice) => {
+            if (choice === RESTART) {
+                commands.executeCommand(RESTART_COMMAND)
+            }
+        })
     }
 }

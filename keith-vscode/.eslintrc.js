@@ -1,4 +1,5 @@
 module.exports = {
+    ignorePatterns: ['dist/', 'pack/', 'out/', '*.vsix'],
     env: {
         node: true,
         es2021: true,

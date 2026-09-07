@@ -202,24 +202,110 @@ table, th, td {
     background-color: var(--vscode-inputOption-hoverBackground);
 }
 
-.simulation-table-input {
-    cursor: text;
+.simulation-table-input,
+.simulation-table-input-pending {
+    cursor: pointer;
     background: var(--vscode-input-background);
+    font-family: var(--vscode-editor-font-family);
+}
+
+/* A value queued for the next tick that the server has not seen yet. */
+.simulation-table-input-pending {
+    font-weight: 600;
+    color: var(--vscode-charts-orange, #d18616);
+    box-shadow: inset 2px 0 0 var(--vscode-charts-orange, #d18616);
 }
 
 .simulation-table-label {
     cursor: default;
+    white-space: nowrap;
+}
+
+.sim-name {
+    font-family: var(--vscode-editor-font-family);
+}
+
+.sim-badge {
+    margin-left: 6px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: middle;
+    color: var(--vscode-badge-foreground);
+    background: var(--vscode-badge-background);
+}
+
+.sim-badge-in {
+    color: var(--vscode-button-foreground);
+    background: var(--vscode-button-background);
+}
+
+.simulation-table-value {
+    font-family: var(--vscode-editor-font-family);
+    white-space: nowrap;
+}
+
+.sim-bool-true {
+    color: var(--vscode-charts-green, #89d185);
+}
+
+.sim-bool-false {
+    color: var(--vscode-descriptionForeground);
 }
 
 .simulation-table-history {
     cursor: default;
     overflow-x: auto;
     white-space: nowrap;
-    max-width: var(--simulation-history-max-width); /* Set a max-width for the history table, the concrete size is debatable */
+    max-width: var(--simulation-history-max-width);
+    padding: 2px 4px;
+}
+
+/* Newest tick on the left, older ticks trailing off to the right. */
+.sim-history {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 2px;
+    overflow-x: auto;
+    align-items: center;
+    font-family: var(--vscode-editor-font-family);
+    font-variant-numeric: tabular-nums;
+}
+
+.sim-chip {
+    flex: 0 0 auto;
+    min-width: 1.6em;
+    padding: 0 4px;
+    text-align: center;
+    border-radius: 3px;
+    line-height: 1.5em;
+    color: var(--vscode-descriptionForeground);
+    background: var(--vscode-editorWidget-background, transparent);
+}
+
+.sim-chip-on {
+    color: var(--vscode-charts-green, #89d185);
+}
+
+.sim-chip-changed {
+    color: var(--vscode-foreground);
+    background: var(--vscode-inputOption-activeBackground, rgba(127, 127, 127, 0.25));
+}
+
+.sim-chip-latest {
+    outline: 1px solid var(--vscode-focusBorder);
+    color: var(--vscode-foreground);
+}
+
+.sim-chip-more {
+    flex: 0 0 auto;
+    padding: 0 4px;
+    font-size: 0.85em;
+    color: var(--vscode-descriptionForeground);
 }
 
 .simulation-table-categories {
     cursor: default;
 }
-
-

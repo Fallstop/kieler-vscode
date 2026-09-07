@@ -1,5 +1,7 @@
 .vscode/**
 .vscode-test/**
+test/**
+src-webview/**
 *.vsix
 node_modules
 out/**

@@ -1,0 +1,56 @@
+/*
+ * KIELER - Kiel Integrated Environment for Layout Eclipse RichClient
+ *
+ * http://rtsys.informatik.uni-kiel.de/kieler
+ *
+ * Copyright 2021 by
+ * + Kiel University
+ *   + Department of Computer Science
+ *     + Real-Time and Embedded Systems Group
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+
+/** The svg container has an outline when focused. It does not look nice so we remove it.*/
+.sprotty-graph {
+    outline: none;
+}
+
+/** Apply VS Code theme to klighd-core semantic theme tokens */
+body {
+    --kdc-color-sidebar-background: var(--vscode-sideBar-background);
+    --kdc-color-sidebar-trigger-background: var(--vscode-sideBar-background);
+    --kdc-color-sidebar-trigger-background-hover: var(--vscode-list-activeSelectionBackground);
+    --kdc-color-sidebar-trigger-background-active: var(--vscode-list-inactiveSelectionBackground);
+    --kdc-color-sidebar-hover-background: var(--vscode-toolbar-hoverBackground);
+    --kdc-color-sidebar-font-primary: var(--vscode-foreground);
+    --kdc-color-sidebar-icon-primary: var(--vscode-icon-foreground);
+    --kdc-color-primary: var(--vscode-focusBorder);
+    --kdc-color-findMatchBackground: var(--vscode-editor-findMatchBackground);
+    --kdc-color-findMatchForeground: var(--vscode-editor-findMatchForeground);
+    --kdc-color-findMatchBorder: var(--vscode-editor-findMatchBorder);
+    --kdc-color-findMatchHighlightBackground: var(--vscode-editor-findMatchHighlightBackground);
+    --kdc-color-findMatchHighlightForeground: var(--vscode-editor-findMatchHighlightForeground);
+    --kdc-color-findMatchHighlightBorder: var(--vscode-editor-findMatchHighlightBorder);
+    --kdc-color-input-background: var(--vscode-input-background);
+    --kdc-color-input-border: var(--vscode-input-border);
+    --kdc-color-input-foreground: var(--vscode-input-foreground);
+    --kdc-color-input-placeholderForeground: var(--vscode-input-placeholderForeground);
+    --kdc-color-inputOption-activeBackground: var(--vscode-inputOption-activeBackground);
+    --kdc-color-inputOption-activeBorder: var(--vscode-inputOption-activeBorder);
+    --kdc-color-inputOption-hoverBackground: var(--vscode-inputOption-hoverBackground);
+    --kdc-color-focusBorder: var(--vscode-focusBorder);
+    --kdc-color-errorForeground: var(--vscode-errorForeground);
+    --kdc-color-list-activeSelectionForeground: var(--vscode-list-activeSelectionForeground);
+    --kdc-color-list-activeSelectionBackground: var(--vscode-list-activeSelectionBackground);
+    --kdc-color-list-focusOutline: var(--vscode-list-focusOutline);
+    --kdc-color-list-hoverBackground: var(--vscode-list-hoverBackground);
+    --kdc-color-list-hoverForeground: var(--vscode-list-hoverForeground);
+    --kdc-color-selection-background: var(--vscode-selection-background);
+    --kdc-color-breadcrumb-foreground: var(--vscode-breadcrumb-foreground);
+    --kdc-color-breadcrumb-background: var(--vscode-breadcrumb-background);
+}

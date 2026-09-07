@@ -1,0 +1,10 @@
+scchart Audit {
+  input bool trigger
+  output bool result = false
+
+  initial state Idle
+  if trigger do result = true go to Active
+
+  state Active
+  if !trigger do result = false go to Idle
+}

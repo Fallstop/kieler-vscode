@@ -151,13 +151,16 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         this.context.subscriptions.push(this.compilation)
 
         // Bind notifications to receive
-        lsClient.start().then(() => {
+        this.context.subscriptions.push(
+            lsClient.onNotification(cancelCompilationMessageType, (success: boolean) =>
+                this.cancelCompilation(success)
+            ),
             lsClient.onNotification(
                 compilationSystemsMessageType,
                 (param: { systems: CompilationSystem[]; snapshotSystems: CompilationSystem[] }) => {
                     this.handleReceiveSystemDescriptions(param.systems, param.snapshotSystems)
                 }
-            )
+            ),
             lsClient.onNotification(
                 snapshotDescriptionMessageType,
                 (params: {
@@ -176,11 +179,11 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                     )
                 }
             )
-        })
+        )
         // Bind to change active editor event
         this.context.subscriptions.push(
             vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-                this.onDidChangeActiveTextEditor(editor)
+                await this.onDidChangeActiveTextEditor(editor).catch((error) => this.output.appendLine(String(error)))
             })
         )
 
@@ -197,7 +200,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         // Request compilation systems at the start, since onDidChangeActiveTextEditor does not fire at the beginning
         const editor = vscode.window.activeTextEditor
         if (editor) {
-            this.onDidChangeActiveTextEditor(editor)
+            this.onDidChangeActiveTextEditor(editor).catch((error) => this.output.appendLine(String(error)))
         }
 
         // TODO lme: maybe re-order commands to fit order in commands.ts
@@ -449,11 +452,14 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
     }
 
     async onDidChangeActiveTextEditor(editor: vscode.TextEditor | undefined): Promise<void> {
-        if (editor && editor.document.uri.scheme === 'file') {
-            this.lsClient.start().then(() => {
-                this.editor = editor
-                this.requestSystemDescriptions()
-            })
+        if (
+            editor &&
+            editor.document.uri.scheme === 'file' &&
+            ['sctx', 'scl', 'elkt', 'elkj', 'kgt', 'kgx', 'kviz', 'strl', 'lus'].includes(editor.document.languageId)
+        ) {
+            this.editor = editor
+            this.sourceModelPath = editor.document.uri.toString()
+            await this.requestSystemDescriptions()
         }
     }
 
@@ -482,9 +488,8 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
             this.requestedSystems = true
             const uri = this.editor.document.uri.toString()
             // Check if language client was already initialized and wait till it is
-            this.lsClient.start().then(async () => {
-                await this.lsClient.sendNotification(GET_SYSTEMS, uri)
-            })
+            await this.lsClient.start()
+            await this.lsClient.sendNotification(GET_SYSTEMS, uri)
         } else {
             this.systems = []
         }
@@ -517,38 +522,46 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         command: string,
         inplace: boolean,
         showResultingModel: boolean,
-        snapshot: boolean
+        snapshot: boolean,
+        uri = this.editor?.document.uri.toString()
     ): Promise<void> {
+        if (!uri) throw new Error(EDITOR_UNDEFINED_MESSAGE)
+        if (this.compiling) throw new Error('A compilation is already in progress.')
         this.startTime = Date.now()
         this.compiling = true
-        await this.executeCompile(command, inplace, showResultingModel, snapshot)
+        this.cancellingCompilation = false
         this.lastInvokedCompilation = command
-        this.lastCompiledUri = this.sourceModelPath
+        this.lastCompiledUri = uri
+        try {
+            await this.executeCompile(command, inplace, showResultingModel, snapshot, uri)
+        } catch (error) {
+            this.compiling = false
+            this.compilationFinishedEmitter.fire(false)
+            throw error
+        }
     }
 
-    executeCompile(command: string, inplace: boolean, showResultingModel: boolean, snapshot: boolean): void {
-        if (!this.editor) {
-            vscode.window.showErrorMessage(EDITOR_UNDEFINED_MESSAGE)
-            return
-        }
-
-        const uri = this.sourceModelPath
-
+    async executeCompile(
+        command: string,
+        inplace: boolean,
+        showResultingModel: boolean,
+        snapshot: boolean,
+        uri = this.sourceModelPath
+    ): Promise<void> {
         if (!this.settings.get('autocompile.enabled')) {
             // TODO too much information? Test this for visual clutter
             vscode.window.showInformationMessage(`Compiling ${uri} with ${command}`)
         }
-        this.lsClient.start().then(() => {
-            this.lsClient.sendNotification(COMPILE, {
-                uri,
-                clientId: `${diagramType}_sprotty`,
-                command,
-                inplace,
-                showResultingModel,
-                snapshot,
-            })
-            this.compilationStartedEmitter.fire(this)
+        await this.lsClient.start()
+        await this.lsClient.sendNotification(COMPILE, {
+            uri,
+            clientId: `${diagramType}_sprotty`,
+            command,
+            inplace,
+            showResultingModel,
+            snapshot,
         })
+        this.compilationStartedEmitter.fire(this)
     }
 
     /**
@@ -607,15 +620,15 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                     this._onDidChangeTreeData.fire(element)
                 })
             })
-            this.compilationFinishedEmitter.fire(!errorOccurred)
+            this.compilationFinishedEmitter.fire(!errorOccurred && !this.cancellingCompilation)
 
             this.endTime = Date.now()
             // Set finished bar if the currentIndex of the processor is the maxIndex the compilation was not canceled TODO
             this.compilation.text =
-                currentIndex === maxIndex && !errorOccurred
+                currentIndex >= maxIndex && !errorOccurred
                     ? `$(check) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
                     : `$(times) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
-            this.compilation.tooltip = currentIndex === maxIndex ? 'Compilation finished' : 'Compilation stopped'
+            this.compilation.tooltip = currentIndex >= maxIndex ? 'Compilation finished' : 'Compilation stopped'
             if (errorOccurred) {
                 vscode.window.showErrorMessage(
                     `An error occurred during compilation. Check the output channel for details.${errorString}`
@@ -623,7 +636,8 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
             }
         } else {
             // Set progress bar for compilation TODO
-            const progress = '█'.repeat(currentIndex) + '░'.repeat(maxIndex - currentIndex)
+            const completed = Math.max(0, Math.min(40, Math.round((currentIndex / Math.max(1, maxIndex)) * 40)))
+            const progress = '█'.repeat(completed) + '░'.repeat(40 - completed)
 
             this.compilation.show()
             this.compilation.text = `$(spinner) ${progress}`

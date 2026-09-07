@@ -91,7 +91,7 @@ export class ModelCheckerDataProvider implements vscode.WebviewViewProvider {
 
     protected compiler: CompilationDataProvider
 
-    protected props: SmallVerificationProperty[]
+    protected props: SmallVerificationProperty[] = []
 
     protected selectedRow: string
 
@@ -103,13 +103,11 @@ export class ModelCheckerDataProvider implements vscode.WebviewViewProvider {
     ) {
         this.compiler = compiler
         // Bind to LSP messages
-        lsClient.start().then(() => {
+        this.context.subscriptions.push(
             lsClient.onNotification(propertiesMessageType, (propertyMsg) => {
                 this.props = propertyMsg.properties
                 this.handlePropertiesMessage(this.props)
-            })
-        })
-        lsClient.start().then(() => {
+            }),
             lsClient.onNotification(
                 updatePropertyStatusMessageType,
                 (id: string, status: VerificationPropertyStatus, counterexampleUri: string) => {
@@ -120,7 +118,7 @@ export class ModelCheckerDataProvider implements vscode.WebviewViewProvider {
                     }
                 }
             )
-        })
+        )
 
         this.context.subscriptions.push(
             vscode.commands.registerCommand(RELOAD_PROPERTIES_VERIFICATION.command, async () => {
@@ -138,14 +136,15 @@ export class ModelCheckerDataProvider implements vscode.WebviewViewProvider {
         // TODO: only show run counterexample if prop is selected (see "simulationRunning")
         this.context.subscriptions.push(
             vscode.commands.registerCommand(RUN_COUNTEREXAMPLE_VERIFICATION.command, async () => {
-                vscode.commands.executeCommand(COMPILE_AND_SIMULATE.command)
                 const selectedProp = this.props.find((prop) => prop.id === this.selectedRow)
-                compiler.compilationFinished((success) => {
-                    if (typeof success !== 'undefined' && success && selectedProp) {
-                        const uri = vscode.Uri.parse(selectedProp.counterexampleUri)
-                        simulation.loadTraceFromUri(uri)
-                    }
-                })
+                if (!selectedProp?.counterexampleUri) {
+                    await vscode.window.showInformationMessage('Select a property with a counterexample first.')
+                    return
+                }
+                const accepted = await vscode.commands.executeCommand<boolean>(COMPILE_AND_SIMULATE.command)
+                if (accepted && (await simulation.waitForRunning())) {
+                    await simulation.loadTraceFromUri(vscode.Uri.parse(selectedProp.counterexampleUri))
+                }
             })
         )
     }
@@ -165,13 +164,15 @@ export class ModelCheckerDataProvider implements vscode.WebviewViewProvider {
      * @param props The verification property.
      */
     private handlePropertiesMessage(props: SmallVerificationProperty[]) {
-        this.webview.reset()
-        props.forEach((prop) =>
-            this.webview.addRow(
-                prop.id,
-                { cssClass: 'model-checker-name', value: prop.name },
-                { cssClass: 'model-checker-formula', value: prop.formula }
-            )
+        this.webview?.reset()
+        props.forEach(
+            (prop) =>
+                this.webview?.addRow(
+                    prop.id,
+                    { cssClass: 'model-checker-name', value: prop.name },
+                    { cssClass: 'model-checker-formula', value: prop.formula },
+                    { cssClass: 'model-checker-result', value: statusToString(prop.status) }
+                )
         )
     }
 
@@ -186,7 +187,7 @@ export class ModelCheckerDataProvider implements vscode.WebviewViewProvider {
         if (prop) {
             prop.status = status
         }
-        this.webview.updateCell(id, 'Result', { cssClass: 'model-checker-result', value: statusToString(status) })
+        this.webview?.updateCell(id, 'Result', { cssClass: 'model-checker-result', value: statusToString(status) })
     }
 
     /**
