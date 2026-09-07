@@ -35,13 +35,21 @@ export function strMapToJson(strMap: Map<string, unknown>): string {
     return JSON.stringify(strMapToObj(strMap))
 }
 
+/** The input that tells timed models how much time passes per tick; clocks only advance when it is set. */
+export function isTimeDelta(data: { id?: string; categories: string[] }): boolean {
+    return /^[#_]*deltaT$/i.test(data.id ?? '') || data.categories.includes('ticktime')
+}
+
+/** Clocks and the time delta belong to the model author, whatever the compiler tagged them as. */
+export function isTimeRelated(data: { id?: string; categories: string[] }): boolean {
+    return isTimeDelta(data) || data.categories.includes('clock')
+}
+
 export function isInternal(data: SimulationData): boolean {
-    return (
-        data.categories.includes('guard') ||
-        data.categories.includes('sccharts-generated') ||
-        data.categories.includes('term') ||
-        data.categories.includes('ticktime')
-    )
+    if (isTimeRelated(data)) {
+        return false
+    }
+    return data.categories.includes('guard') || data.categories.includes('term')
 }
 
 export function reverse(array: unknown[]): unknown[] {
@@ -77,7 +85,7 @@ export class SimulationStartedMessage {
         public successful: boolean,
         public error: string,
         public dataPool: Record<string, unknown>,
-        public propertySet: Map<string, string[]>
+        public propertySet: Record<string, string[]>
     ) {}
 }
 
@@ -92,6 +100,10 @@ export class Category {
  * Message is used as a request and response parameter for a simulation step.
  */
 export class SimulationStepMessage {
+    successful?: boolean
+
+    error?: string
+
     constructor(public values: Record<string, unknown>) {}
 }
 

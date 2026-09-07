@@ -27,6 +27,8 @@ type SettingList<S> = Tuple<Extract<keyof S, string>>
  * Service for providing an interface for retrieving and updating VSC settings.
  */
 export class SettingsService<S> {
+    private readonly subscription: vscode.Disposable
+
     /**
      * Cache for settings, so no calls to API are needed upon requests for values of settings.
      */
@@ -52,7 +54,7 @@ export class SettingsService<S> {
         }
 
         // register listener for setting changes
-        vscode.workspace.onDidChangeConfiguration((e) => {
+        this.subscription = vscode.workspace.onDidChangeConfiguration((e) => {
             // get current workspace configuration and iterate over current cache
             const config = vscode.workspace.getConfiguration(this.configurationKey)
             for (const key of this.cache.keys()) {
@@ -81,9 +83,13 @@ export class SettingsService<S> {
      * @param key key of the setting
      * @param value new value of the setting
      */
-    public set<K extends Extract<keyof S, string>>(key: K, value: S[K]): void {
+    public async set<K extends Extract<keyof S, string>>(key: K, value: S[K]): Promise<void> {
         const configurationTarget = this.determineConfigurationTarget(key)
-        vscode.workspace.getConfiguration(this.configurationKey).update(key, value, configurationTarget)
+        await vscode.workspace.getConfiguration(this.configurationKey).update(key, value, configurationTarget)
+    }
+
+    dispose(): void {
+        this.subscription.dispose()
     }
 
     /**

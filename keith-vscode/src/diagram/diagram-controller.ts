@@ -21,6 +21,7 @@ import { Action, ActionMessage } from 'sprotty-protocol'
 import { registerLspEditCommands } from 'sprotty-vscode'
 import * as vscode from 'vscode'
 import { LanguageClient, State } from 'vscode-languageclient/node'
+import { NotificationType } from 'vscode-messenger-common'
 import { registerCommands, registerTextEditorSync } from './commandContributions'
 import { command, diagramClientId, diagramType } from './constants'
 import { KlighdWebviewReopener } from './klighd-webview-reopener'
@@ -46,6 +47,12 @@ export class DiagramController {
 
     private readonly disposables: vscode.Disposable[] = []
 
+    private readonly notificationHandlers = new Set<() => void>()
+
+    private readonly diagramChanged = new vscode.EventEmitter<void>()
+
+    readonly onDidChangeDiagram = this.diagramChanged.event
+
     private hasRun = false
 
     constructor(
@@ -69,7 +76,9 @@ export class DiagramController {
                 } else {
                     // The server came back after a restart or crash. Its diagram state is gone, so the
                     // webview must be rebuilt against it rather than left showing a dead diagram.
-                    this.manager?.restart()
+                    this.manager?.restart().catch((error) => {
+                        vscode.window.showErrorMessage(`The diagram could not be restarted: ${error}`)
+                    })
                 }
             })
         )
@@ -118,6 +127,11 @@ export class DiagramController {
                 })
             )
             this.storageService.setMessenger(this.manager.messenger)
+            this.notificationHandlers.forEach((register) => register())
+            this.context.subscriptions.push(
+                this.manager.onDidChangeDiagram(() => this.diagramChanged.fire()),
+                this.diagramChanged
+            )
             new KlighdWebviewReopener(this.storageService).reopenDiagram()
         } catch (error) {
             vscode.window.showErrorMessage(`The KIELER diagram view could not be set up: ${error}`)
@@ -128,6 +142,29 @@ export class DiagramController {
     /** Intercept diagram actions of the given kind before they reach the language server. */
     addActionHandler(kind: string, actionHandler: ActionHandlerCallback): void {
         this.actionHandlers.push({ kind, actionHandler })
+    }
+
+    /** Receive a notification of the given type from any diagram webview. */
+    onWebviewNotification<P>(type: NotificationType<P>, handler: (params: P) => void): vscode.Disposable {
+        let subscription: vscode.Disposable | undefined
+        const register = () => {
+            subscription = this.manager?.messenger.onNotification(type, handler)
+        }
+        this.notificationHandlers.add(register)
+        register()
+        return new vscode.Disposable(() => {
+            this.notificationHandlers.delete(register)
+            subscription?.dispose()
+        })
+    }
+
+    get currentUri(): vscode.Uri | undefined {
+        return this.manager?.currentUri
+    }
+
+    /** Send a notification to every open diagram webview; a no-op while none is open. */
+    sendToDiagram<P>(type: NotificationType<P>, payload: P): void {
+        this.manager?.messenger.sendNotification(type, { type: 'webview', webviewType: diagramType }, payload)
     }
 
     /** Send an action to the open diagram, if any. */

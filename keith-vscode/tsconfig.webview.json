@@ -5,5 +5,5 @@
         "declaration": false,
         "noEmit": false
     },
-    "include": ["src-webview/diagram", "src/diagram/storage/messages.ts"]
+    "include": ["src-webview/diagram", "src/diagram/storage/messages.ts", "src/simulation/protocol.ts"]
 }

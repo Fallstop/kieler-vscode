@@ -21,6 +21,7 @@ import 'reflect-metadata'
 import '@kieler/klighd-core/styles/main.css'
 import 'sprotty-vscode-webview/css/sprotty-vscode.css'
 import './main.css'
+import './simulation/simulation.css'
 
 import { bindServices, createKlighdDiagramContainer } from '@kieler/klighd-core'
 import { Container } from 'inversify'
@@ -37,6 +38,7 @@ import { VsCodeApi, VsCodeMessenger } from 'sprotty-vscode-webview/lib/services'
 import { KlighdDiagramWidget } from './klighd-widget'
 import { MessageConnection } from './message-connection'
 import { MessagePersistenceStorage } from './persistence-storage'
+import { SimulationView } from './simulation/view'
 /* global sessionStorage, window */
 
 /** Uses `klighd-core` and {@link SprottyStarter} to create a diagram container in a webview. */
@@ -49,9 +51,18 @@ export class KLighDSprottyStarter extends SprottyStarter {
     // Therefore, we capture all ActionMessages from the extension until the container is ready to receive them.
     private queuedActionMessages: ActionMessage[] = []
 
+    /** Simulation controls and trace wrapped around the diagram. */
+    private readonly simulationView: SimulationView
+
     constructor() {
         super()
         window.addEventListener('message', this.queueActionMessage)
+        this.simulationView = new SimulationView(this.messenger)
+    }
+
+    override start(): void {
+        super.start()
+        this.simulationView.connect()
     }
 
     /** Queues an action message to be replayed for the diagram container */

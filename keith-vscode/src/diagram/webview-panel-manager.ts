@@ -28,6 +28,8 @@ import {
 } from 'sprotty-vscode'
 import { LspWebviewEndpoint, LspWebviewPanelManager, LspWebviewPanelManagerOptions } from 'sprotty-vscode/lib/lsp'
 import { addLspLabelEditActionHandler, addWorkspaceEditActionHandler } from 'sprotty-vscode/lib/lsp/editing'
+import { didCloseMessageType } from 'sprotty-vscode/lib/lsp/protocol'
+import * as path from 'path'
 import * as vscode from 'vscode'
 import { contextKeys, diagramClientId } from './constants'
 import { StorageService } from './storage/storage-service'
@@ -57,6 +59,10 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
     private lastViewColumn: vscode.ViewColumn | undefined
 
     private restarting = false
+
+    private readonly diagramChanged = new vscode.EventEmitter<void>()
+
+    readonly onDidChangeDiagram = this.diagramChanged.event
 
     constructor(
         options: LspWebviewPanelManagerOptions,
@@ -97,7 +103,14 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
         const endpoint = await super.openDiagram(uri, options)
         if (endpoint) {
             this.lastUri = uri
+            if (endpoint.diagramIdentifier) {
+                endpoint.webviewContainer.title = `[Preview] ${createWebviewTitle(endpoint.diagramIdentifier)}`
+            }
             vscode.commands.executeCommand('setContext', contextKeys.diagramOpen, true)
+            if (options.reveal && isWebviewPanel(endpoint.webviewContainer)) {
+                endpoint.webviewContainer.reveal(endpoint.webviewContainer.viewColumn, options.preserveFocus)
+            }
+            this.diagramChanged.fire()
         }
         return endpoint
     }
@@ -114,7 +127,7 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
                 disposed = true
             }
             if (disposed) {
-                super.didCloseWebview(endpoint)
+                this.didCloseWebview(endpoint)
             }
         }
     }
@@ -132,7 +145,8 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
         try {
             const uri = this.lastUri
             const column = this.lastViewColumn
-            const panels = this.endpoints.map((endpoint) => endpoint.webviewContainer)
+            const endpoints = [...this.endpoints]
+            const panels = endpoints.map((endpoint) => endpoint.webviewContainer)
             panels.forEach((panel) => {
                 if (isWebviewPanel(panel)) {
                     panel.dispose()
@@ -141,7 +155,7 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
             // Disposal is reported asynchronously; wait until the manager has dropped the endpoints.
             await waitUntil(() => this.endpoints.length === 0, 2000)
             this.pruneDisposedEndpoints()
-            this.endpoints.length = 0
+            endpoints.forEach((endpoint) => this.didCloseWebview(endpoint))
             if (uri) {
                 this.lastViewColumn = column
                 await this.openDiagram(uri, { reveal: true, preserveFocus: true })
@@ -170,24 +184,29 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
     }
 
     /**
-     * Same as the sprotty-vscode default, but reopens in the column the diagram was in before a
-     * restart instead of always beside the editor.
+     * Same as the sprotty-vscode default, but titled as a preview, and reopened in the column the
+     * diagram was in before a restart instead of always beside the editor.
      */
     protected override createWebview(identifier: SprottyDiagramIdentifier): vscode.WebviewPanel {
         const extensionPath = this.options.extensionUri.fsPath
-        const title = createWebviewTitle(identifier)
+        const title = `[Preview] ${createWebviewTitle(identifier)}`
         const panel = vscode.window.createWebviewPanel(
             identifier.diagramType || 'diagram',
             title,
-            this.lastViewColumn ?? vscode.ViewColumn.Beside,
+            { viewColumn: this.lastViewColumn ?? vscode.ViewColumn.Beside, preserveFocus: true },
             {
                 localResourceRoots: this.options.localResourceRoots ?? [createFileUri(extensionPath, 'pack')],
                 enableScripts: true,
                 retainContextWhenHidden: true,
             }
         )
+        panel.iconPath = vscode.Uri.file(path.join(extensionPath, 'icon.png'))
         const scriptUri = createFileUri(extensionPath, 'pack', 'webview.js')
-        panel.webview.html = createWebviewHtml(identifier, panel, { scriptUri })
+        // sprotty-vscode's policy has no font-src, which silently blocks klighd's codicon font.
+        panel.webview.html = createWebviewHtml(identifier, panel, { scriptUri, title }).replace(
+            'style-src',
+            `font-src ${panel.webview.cspSource}; style-src`
+        )
         panel.onDidChangeViewState(() => {
             this.lastViewColumn = panel.viewColumn ?? this.lastViewColumn
         })
@@ -215,10 +234,17 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
     }
 
     protected override didCloseWebview(endpoint: WebviewEndpoint): void {
+        if (!this.endpoints.includes(endpoint)) return
         // The panel is already disposed here; reading its view column would throw and leave the
         // dead endpoint registered, which is why the diagram could never be reopened.
-        super.didCloseWebview(endpoint)
+        this.endpoints.splice(this.endpoints.indexOf(endpoint), 1)
+        if (this.languageClient.isRunning()) {
+            this.languageClient
+                .sendNotification(didCloseMessageType, endpoint.diagramIdentifier?.clientId)
+                .catch(() => undefined)
+        }
         if (this.endpoints.length === 0) {
+            vscode.commands.executeCommand('setContext', `${endpoint.diagramIdentifier?.diagramType}-focused`, false)
             vscode.commands.executeCommand('setContext', contextKeys.diagramOpen, false)
             // A restart closes and reopens; only a user-initiated close should be remembered.
             if (!this.restarting) {

@@ -55,37 +55,41 @@ export class KlighDWebviewEndpoint extends WebviewEndpoint {
 
     protected override connect(): void {
         super.connect()
-        this.messenger.onRequest(
-            LspRequest,
-            async (request) => {
-                const result: any =
-                    request.params === undefined
-                        ? await this.languageClient.sendRequest(request.method)
-                        : await this.languageClient.sendRequest(request.method, request.params)
-                const response: ResponseMessage = {
-                    jsonrpc: '2.0',
-                    id: request.id,
-                    result,
-                }
-                return response
-            },
-            { sender: this.messageParticipant }
-        )
-        this.messenger.onNotification(
-            LspNotification,
-            (notification) => {
-                // Catch any diagram/accept action and call the registered action handlers.
-                if (notification.method === 'diagram/accept' && isActionMessage(notification.params)) {
-                    const { action } = notification.params
-                    const handlers = this.klighdActionHandlers.get(notification.params.action.kind)
-                    if (handlers) {
-                        handlers.forEach((handler) => handler(action))
-                        // TODO: if one of the handlers says the action does not need to be forwarded to the server, do not forward it.
+        this.disposables.push(
+            this.messenger.onRequest(
+                LspRequest,
+                async (request) => {
+                    const result: any =
+                        request.params === undefined
+                            ? await this.languageClient.sendRequest(request.method)
+                            : await this.languageClient.sendRequest(request.method, request.params)
+                    const response: ResponseMessage = {
+                        jsonrpc: '2.0',
+                        id: request.id,
+                        result,
                     }
-                }
-                this.languageClient.sendNotification(notification.method, notification.params)
-            },
-            { sender: this.messageParticipant }
+                    return response
+                },
+                { sender: this.messageParticipant }
+            )
+        )
+        this.disposables.push(
+            this.messenger.onNotification(
+                LspNotification,
+                (notification) => {
+                    // Catch any diagram/accept action and call the registered action handlers.
+                    if (notification.method === 'diagram/accept' && isActionMessage(notification.params)) {
+                        const { action } = notification.params
+                        const handlers = this.klighdActionHandlers.get(notification.params.action.kind)
+                        if (handlers) {
+                            handlers.forEach((handler) => handler(action))
+                            // TODO: if one of the handlers says the action does not need to be forwarded to the server, do not forward it.
+                        }
+                    }
+                    this.languageClient.sendNotification(notification.method, notification.params)
+                },
+                { sender: this.messageParticipant }
+            )
         )
     }
 

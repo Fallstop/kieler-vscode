@@ -30,6 +30,7 @@ import { handlePerformAction, PerformActionAction, performActionKind } from './p
 import { SettingsService } from './settings'
 import { RESTART_LANGUAGE_SERVER } from './simulation/commands'
 import { SimulationTableDataProvider } from './simulation/simulation-table-data-provider'
+import { SimulationViewBridge } from './simulation/simulation-view-bridge'
 // import 'simulation/index.css'
 
 /**
@@ -44,16 +45,14 @@ let socket: Socket
 let settingsService: SettingsService<Settings>
 
 // this method is called when your extension is deactivated
-export function deactivate(): Promise<void> {
-    return new Promise<void>((resolve) => {
-        if (socket) {
-            // Don't call lsClient.stop when we are connected via socket for development.
-            // That call will end the LS server, leading to a bad dev experience.
-            socket.end(resolve)
-            return
-        }
-        lsClient?.stop().then(resolve)
-    })
+export async function deactivate(): Promise<void> {
+    if (socket) {
+        // Don't call lsClient.stop when we are connected via socket for development.
+        // That call will end the LS server, leading to a bad dev experience.
+        socket.end()
+        return
+    }
+    await lsClient?.stop()
 }
 
 /**
@@ -111,12 +110,12 @@ async function restartLanguageServer(simulation: SimulationTableDataProvider): P
         async () => {
             try {
                 await lsClient.restart()
+                vscode.window.setStatusBarMessage('$(check) KIELER language server restarted', 5000)
             } catch (error) {
                 vscode.window.showErrorMessage(`KIELER language server failed to restart: ${error}`)
             }
         }
     )
-    vscode.window.setStatusBarMessage('$(check) KIELER language server restarted', 5000)
 }
 
 // this method is called when your extension is activated
@@ -160,14 +159,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         'simulationType',
         'showInternalVariables.enabled',
     ])
+    context.subscriptions.push(settingsService)
 
     const compilationDataProvider = new CompilationDataProvider(lsClient, context, settingsService)
 
     // Register and start kico view
-    vscode.window.registerTreeDataProvider('kieler-kico', compilationDataProvider)
-    vscode.window.createTreeView('kieler-kico', {
-        treeDataProvider: compilationDataProvider,
-    })
+    context.subscriptions.push(
+        vscode.window.createTreeView('kieler-kico', {
+            treeDataProvider: compilationDataProvider,
+        })
+    )
 
     // Register and start simulation table view
     const simulationDataProvider: SimulationTableDataProvider = new SimulationTableDataProvider(
@@ -176,7 +177,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         context,
         settingsService
     )
-    vscode.window.registerWebviewViewProvider('kieler-simulation-table', simulationDataProvider)
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider('kieler-simulation-table', simulationDataProvider)
+    )
+    // The diagram preview tab carries the simulation controls and the tick-by-tick trace.
+    context.subscriptions.push(new SimulationViewBridge(simulationDataProvider, diagrams, settingsService))
 
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_LANGUAGE_SERVER.command, () =>
@@ -191,12 +196,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         context,
         simulationDataProvider
     )
-    vscode.window.registerWebviewViewProvider('kieler-model-checker', modelCheckerDataProvider)
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider('kieler-model-checker', modelCheckerDataProvider)
+    )
 
     // After a restart (manual or automatic) the compiler panel must learn the fresh server's systems.
     let serverStarts = 0
     context.subscriptions.push(
         lsClient.onDidChangeState((event) => {
+            if (event.newState === State.Stopped) {
+                compilationDataProvider.compiling = false
+                compilationDataProvider.lastCompiledUri = ''
+                compilationDataProvider.compilationFinishedEmitter.fire(false)
+                vscode.commands.executeCommand('setContext', 'keith.vscode:compilationReady', false)
+            }
             if (event.newState !== State.Running) {
                 return
             }
@@ -209,7 +222,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     // eslint-disable-next-line no-console
     console.debug('Starting Language Server...')
-    lsClient.start()
+    await lsClient.start()
 
     // TODO save stuff in context e.g. commands.executeCommand("setContext", "var", value);
 }
