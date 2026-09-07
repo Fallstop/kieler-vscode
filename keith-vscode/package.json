@@ -2,7 +2,7 @@
   "name": "keith-vscode",
   "displayName": "KIELER VS Code",
   "description": "KIELER Visual Studio Code",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "publisher": "kieler",
   "author": "KIELER <kieler@rtsys.informatik.uni-kiel.de>",
   "icon": "icon.png",
@@ -339,6 +339,12 @@
         "title": "Start Counterexample",
         "category": "Verification",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "keith-vscode.restart-language-server",
+        "title": "Restart KIELER language server",
+        "icon": "$(debug-restart)",
+        "category": "KIELER"
       }
     ],
     "menus": {
@@ -445,6 +451,9 @@
         },
         {
           "command": "keith-vscode.verification-run-counterexample"
+        },
+        {
+          "command": "keith-vscode.restart-language-server"
         }
       ],
       "editor/title": [
@@ -462,6 +471,26 @@
           "when": "resourceLangId in keith-vscode.languages",
           "command": "klighd-vscode.diagram.open",
           "group": "navigation@300000"
+        },
+        {
+          "command": "keith-vscode.simulation-step",
+          "when": "keith.vscode:simulationRunning && (keith-diagram-focused || resourceLangId == sctx)",
+          "group": "navigation@11"
+        },
+        {
+          "command": "keith-vscode.simulation-run",
+          "when": "keith.vscode:simulationRunning && (keith-diagram-focused || resourceLangId == sctx) && !keith.vscode:play",
+          "group": "navigation@12"
+        },
+        {
+          "command": "keith-vscode.simulation-pause",
+          "when": "keith.vscode:simulationRunning && (keith-diagram-focused || resourceLangId == sctx) && keith.vscode:play",
+          "group": "navigation@12"
+        },
+        {
+          "command": "keith-vscode.simulation-stop",
+          "when": "keith.vscode:simulationRunning && (keith-diagram-focused || resourceLangId == sctx)",
+          "group": "navigation@13"
         }
       ],
       "editor/context": [
@@ -533,6 +562,21 @@
           "command": "keith-vscode.verification-run-counterexample",
           "when": "view == kieler-model-checker",
           "group": "navigation@3"
+        },
+        {
+          "command": "keith-vscode.restart-language-server",
+          "when": "view == kieler-kico",
+          "group": "navigation@9"
+        },
+        {
+          "command": "keith-vscode.restart-language-server",
+          "when": "view == kieler-model-checker",
+          "group": "navigation@9"
+        },
+        {
+          "command": "keith-vscode.restart-language-server",
+          "when": "view == kieler-simulation-table",
+          "group": "navigation@9"
         }
       ]
     },
@@ -623,7 +667,29 @@
           "description": "Specifies whether internal variables shall be shown in the simulation widget (e.g. guards, ...)."
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "keith-vscode.simulation-step",
+        "key": "ctrl+alt+s",
+        "when": "keith.vscode:simulationRunning"
+      },
+      {
+        "command": "keith-vscode.simulation-run",
+        "key": "ctrl+alt+r",
+        "when": "keith.vscode:simulationRunning && !keith.vscode:play"
+      },
+      {
+        "command": "keith-vscode.simulation-pause",
+        "key": "ctrl+alt+r",
+        "when": "keith.vscode:simulationRunning && keith.vscode:play"
+      },
+      {
+        "command": "keith-vscode.simulation-stop",
+        "key": "ctrl+alt+x",
+        "when": "keith.vscode:simulationRunning"
+      }
+    ]
   },
   "extensionDependencies": [
     "kieler.klighd-vscode"

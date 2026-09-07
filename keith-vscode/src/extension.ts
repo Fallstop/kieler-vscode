@@ -16,6 +16,7 @@
  */
 
 import { connect, NetConnectOpts, Socket } from 'net'
+import * as path from 'path'
 import * as vscode from 'vscode'
 import { LanguageClient, LanguageClientOptions, ServerOptions, StreamInfo } from 'vscode-languageclient/node'
 import { Settings, settingsKey } from './constants'
@@ -25,6 +26,7 @@ import { ModelCheckerDataProvider } from './model-checker/model-checker-data-pro
 import { registerStpaCommands } from './pasta/stpa-interaction'
 import { handlePerformAction, performActionKind } from './perform-action-handler'
 import { SettingsService } from './settings'
+import { RESTART_LANGUAGE_SERVER } from './simulation/commands'
 import { SimulationTableDataProvider } from './simulation/simulation-table-data-provider'
 // import 'simulation/index.css'
 
@@ -86,11 +88,43 @@ function createServerOptions(context: vscode.ExtensionContext): ServerOptions {
     // eslint-disable-next-line no-console
     console.log('Spawning the language server as a process.')
     const lsPath = context.asAbsolutePath(`server/kieler-language-server.jar`)
+    // The bundled language server ships Jetty 11 without a websocket module, but its simulation
+    // visualization server was compiled against Jetty 10. Putting Jetty 10 first on the classpath
+    // shadows the bundled classes so the server on port 5010 can start.
+    const jettyPath = context.asAbsolutePath(`server/jetty10/*`)
+    const args = [
+        '-Djava.awt.headless=true',
+        '-cp',
+        `${jettyPath}${path.delimiter}${lsPath}`,
+        'de.cau.cs.kieler.language.server.LanguageServer',
+    ]
 
     return {
-        run: { command: 'java', args: ['-Djava.awt.headless=true', '-jar', lsPath] },
-        debug: { command: 'java', args: ['-Djava.awt.headless=true', '-jar', lsPath] },
+        run: { command: 'java', args },
+        debug: { command: 'java', args },
     }
+}
+
+/**
+ * Restarts the language server in place, without reloading the window, and forgets any running simulation.
+ * This clears stuck server state such as a diagram view that keeps failing to render.
+ */
+async function restartLanguageServer(simulation: SimulationTableDataProvider): Promise<void> {
+    simulation.resetForRestart()
+    await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Restarting KIELER language server...' },
+        async () => {
+            try {
+                await lsClient.restart()
+            } catch (error) {
+                vscode.window.showErrorMessage(`KIELER language server failed to restart: ${error}`)
+                return
+            }
+            // Ask open diagrams to re-request their model from the fresh server.
+            await vscode.commands.executeCommand('klighd-vscode.diagram.refresh').then(undefined, () => undefined)
+        }
+    )
+    vscode.window.setStatusBarMessage('$(check) KIELER language server restarted', 5000)
 }
 
 // this method is called when your extension is activated
@@ -151,6 +185,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         settingsService
     )
     vscode.window.registerWebviewViewProvider('kieler-simulation-table', simulationDataProvider)
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(RESTART_LANGUAGE_SERVER.command, () =>
+            restartLanguageServer(simulationDataProvider)
+        )
+    )
 
     // Register and start model checker view
     const modelCheckerDataProvider: vscode.WebviewViewProvider = new ModelCheckerDataProvider(

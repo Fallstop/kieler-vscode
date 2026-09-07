@@ -40,6 +40,7 @@ import {
     SET_SIMULATION_STEP_DELAY,
     SET_SIMULATION_TYPE_TO,
     SHOW_INTERNAL_VARIABLES,
+    RESTART_LANGUAGE_SERVER,
     SIMULATE,
     STEP_SIMULATION,
     STOP_SIMULATION,
@@ -146,6 +147,8 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
     private simulationStatus: vscode.StatusBarItem
 
     protected table: TableWebview
+
+    protected view: vscode.WebviewView | undefined
 
     protected disposables: vscode.Disposable[] = []
 
@@ -388,8 +391,9 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         }
         const title = tWebview.getTitle()
         webviewView.title = title
-        tWebview.initializeWebview(webviewView.webview, title, ['Name', 'Input', 'History', 'Categories'])
+        tWebview.initializeWebview(webviewView.webview, title, ['Name', 'Input', 'Value', 'History'])
         this.table = tWebview
+        this.view = webviewView
 
         // Subscriptions
         this.context.subscriptions.push(
@@ -406,9 +410,37 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
 
     clickedRow(rowId: string): void {
         const data = this.simulationData.get(rowId)
-        if (data && data.input) {
+        if (!data || !data.input) {
+            return
+        }
+        const current = this.valuesForNextStep.get(rowId)
+        if (typeof current === 'boolean') {
+            this.setInputValue(data, !current)
+        } else {
             this.newInputValue(data)
         }
+    }
+
+    /**
+     * Queues a new input value for the next tick and reflects it in the table.
+     */
+    setInputValue(simulationData: SimulationData, value: unknown): void {
+        this.valuesForNextStep.set(simulationData.id, value)
+        this.changedValuesForNextStep.set(simulationData.id, value)
+        this.table.updateCell(simulationData.id, 'Input', this.inputCell(simulationData))
+    }
+
+    /**
+     * Forgets the running simulation without contacting the server, e.g. before restarting the server.
+     */
+    resetForRestart(): void {
+        this.setValuesToStopSimulation()
+        this.simulationStep = -1
+        if (this.table) {
+            this.table.reset()
+        }
+        this.updateTickIndicators()
+        this.simulationStatus.hide()
     }
 
     dispose() {
@@ -506,13 +538,7 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
             },
         })
         if (result) {
-            const parsedResult = JSON.parse(result)
-            this.valuesForNextStep.set(simulationData.id, parsedResult)
-            this.changedValuesForNextStep.set(simulationData.id, parsedResult)
-            this.table.updateCell(simulationData.id, 'Input', {
-                cssClass: 'simulation-table-input',
-                value: JSON.stringify(parsedResult),
-            })
+            this.setInputValue(simulationData, JSON.parse(result))
         }
     }
 
@@ -558,8 +584,6 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
             this.output.appendLine(`[ERROR]\t${startMessage.error}`)
             return
         }
-        this.simulationStatus.text = `$(check) (${(this.endTime - this.startTime).toPrecision(3)}ms) Simulating...`
-        this.simulationStatus.tooltip = ''
         this.simulationStatus.show()
 
         // Get the start configuration for the simulation
@@ -601,6 +625,25 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.initializeTable()
         // Show simulation view
         this.update()
+        if (this.view) {
+            this.view.show(true)
+        }
+    }
+
+    /**
+     * Shows the current tick in the view description and the status bar.
+     */
+    updateTickIndicators(): void {
+        if (this.view) {
+            this.view.description = this.simulationRunning ? `tick ${this.simulationStep}` : undefined
+        }
+        if (this.simulationRunning) {
+            this.simulationStatus.text = `$(debug-step-over) Tick ${this.simulationStep}`
+            this.simulationStatus.tooltip = 'Execute simulation step'
+            this.simulationStatus.command = STEP_SIMULATION.command
+        } else {
+            this.simulationStatus.command = undefined
+        }
     }
 
     /**
@@ -633,6 +676,9 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.simulationStatus.text = 'Stopped simulation'
         this.simulationStatus.tooltip = ''
         this.simulationStatus.show()
+        if (this.table) {
+            this.table.reset()
+        }
     }
 
     private setValuesToStopSimulation(): void {
@@ -645,6 +691,7 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.controlsEnabled = false
         this.simulationRunning = false
         vscode.commands.executeCommand('setContext', 'keith.vscode:simulationRunning', this.simulationRunning)
+        this.updateTickIndicators()
     }
 
     /**
@@ -775,11 +822,15 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     handleExternalStop(message: string): void {
-        this.output.appendLine(
-            '[ERROR]\tStopped simulation because of exception on LS. You might want to reload the window.'
-        )
-        // this.messageService.error(message)
+        this.output.appendLine(`[ERROR]\tStopped simulation because of an exception on the language server: ${message}`)
         this.setValuesToStopSimulation()
+        vscode.window
+            .showErrorMessage('The simulation crashed on the KIELER language server.', RESTART_LANGUAGE_SERVER.title)
+            .then((choice) => {
+                if (choice === RESTART_LANGUAGE_SERVER.title) {
+                    vscode.commands.executeCommand(RESTART_LANGUAGE_SERVER.command)
+                }
+            })
     }
 
     /**
@@ -796,30 +847,64 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         return vscode.Uri.file(path.join(this.context.extensionPath, ...segments))
     }
 
+    /**
+     * Whether a data pool entry is shown in the table.
+     */
+    isVisible(entry: SimulationData): boolean {
+        if (SimulationDataBlackList.includes(entry.id)) {
+            return false
+        }
+        const internal = entry.id.includes('_tickCounter') || entry.id.startsWith('_') || entry.id.startsWith('#')
+        return !internal || this.settings.get('showInternalVariables.enabled')
+    }
+
+    nameCell(entry: SimulationData): { cssClass: string; value: string } {
+        let kind = ''
+        if (entry.input) {
+            kind = 'in'
+        } else if (entry.output) {
+            kind = 'out'
+        }
+        return {
+            cssClass: 'simulation-table-label',
+            value: JSON.stringify({ name: entry.label, kind, categories: entry.categories }),
+        }
+    }
+
+    inputCell(entry: SimulationData): { cssClass: string; value: string } {
+        if (!entry.input) {
+            return { cssClass: 'simulation-table-cell', value: '' }
+        }
+        const pending = this.changedValuesForNextStep.has(entry.id)
+        return {
+            cssClass: pending ? 'simulation-table-input-pending' : 'simulation-table-input',
+            value: JSON.stringify(this.valuesForNextStep.get(entry.id)),
+        }
+    }
+
+    valueCell(entry: SimulationData): { cssClass: string; value: string } {
+        const latest = entry.data.length > 0 ? entry.data[entry.data.length - 1] : undefined
+        return {
+            cssClass: 'simulation-table-value',
+            value: latest === undefined ? '' : JSON.stringify(latest),
+        }
+    }
+
+    historyCell(entry: SimulationData): { cssClass: string; value: string } {
+        return { cssClass: 'simulation-table-history', value: JSON.stringify(entry.data) }
+    }
+
     initializeTable() {
         // Initialize table
         this.table.reset()
         this.simulationData.forEach((entry) => {
-            if (
-                !(
-                    SimulationDataBlackList.includes(entry.id) ||
-                    entry.id.includes('_tickCounter') ||
-                    entry.id.startsWith('_') ||
-                    entry.id.startsWith('#')
-                ) ||
-                (this.settings.get('showInternalVariables.enabled') && !SimulationDataBlackList.includes(entry.id))
-            ) {
+            if (this.isVisible(entry)) {
                 this.table.addRow(
                     entry.id,
-                    { cssClass: 'simulation-table-label', value: entry.label },
-                    entry.input
-                        ? {
-                              cssClass: 'simulation-table-input',
-                              value: JSON.stringify(this.valuesForNextStep.get(entry.id)),
-                          }
-                        : { cssClass: 'simulation-table-cell', value: '' },
-                    { cssClass: 'simulation-table-history', value: entry.data.toString() },
-                    { cssClass: 'simulation-table-categories', value: entry.categories.toString() }
+                    this.nameCell(entry),
+                    this.inputCell(entry),
+                    this.valueCell(entry),
+                    this.historyCell(entry)
                 )
             }
         })
@@ -827,24 +912,13 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
     }
 
     update(): void {
+        this.updateTickIndicators()
         if (this.simulationRunning) {
             this.simulationData.forEach((entry) => {
-                if (
-                    !(
-                        SimulationDataBlackList.includes(entry.id) ||
-                        entry.id.includes('_tickCounter') ||
-                        entry.id.startsWith('_') ||
-                        entry.id.startsWith('#')
-                    ) ||
-                    (this.settings.get('showInternalVariables.enabled') && !SimulationDataBlackList.includes(entry.id))
-                ) {
-                    this.table.updateCell(entry.id, 'History', {
-                        cssClass: 'simulation-table-history',
-                        value: entry.data
-                            .reverse()
-                            .map((d, index) => `${index > 0 ? ' ' : ''}${JSON.stringify(d)}`)
-                            .toString(),
-                    })
+                if (this.isVisible(entry)) {
+                    this.table.updateCell(entry.id, 'Input', this.inputCell(entry))
+                    this.table.updateCell(entry.id, 'Value', this.valueCell(entry))
+                    this.table.updateCell(entry.id, 'History', this.historyCell(entry))
                 }
             })
         }

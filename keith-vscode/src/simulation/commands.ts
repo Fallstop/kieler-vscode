@@ -117,3 +117,8 @@ export const SHOW_INTERNAL_VARIABLES: vscode.Command = {
     command: 'keith-vscode.show-internal-variables',
     title: 'Set display internal variables to ...',
 }
+
+export const RESTART_LANGUAGE_SERVER: vscode.Command = {
+    command: 'keith-vscode.restart-language-server',
+    title: 'Restart KIELER language server',
+}
