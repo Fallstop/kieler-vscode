@@ -20,8 +20,10 @@ preview to simulate, step through ticks, edit inputs, and inspect its variable t
 Compilation failures appear above the diagram and in VS Code Problems. Scheduler
 conflicts link to the participating source operations and explain their circular
 ordering. C compiler errors link to generated code and to SCCharts when their origin
-is known. Use **Technical details** for the original output or **Compiler stage** to
-inspect the failed transformation.
+is known. Use **Technical details** for the original output or **View scheduler graph**
+(**View compiler stage** for other failures) to inspect the failed transformation.
+**Highlight in diagram** returns to the original SCCharts diagram and selects the
+involved operations. Source links reuse the model's existing editor tab.
 
 Source edits mark old diagnostics as stale until the next compilation. Compatible
 fixed-size array assignments offer a **Copy array elements individually** quick fix

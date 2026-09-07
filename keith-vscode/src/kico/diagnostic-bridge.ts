@@ -81,10 +81,14 @@ export class DiagnosticBridge implements vscode.Disposable {
         }
         if (report.status === 'stale' || report.status === 'compiling') return
         if (command.kind === 'stage') {
+            this.clearHighlights()
             await this.showStage(report.uri, issue.snapshotIndex)
             return
         }
         if (command.kind === 'highlight') {
+            await this.showStage(report.uri, -1)
+            if (this.diagnostics.get(report.uri) !== report || this.diagnostics.get(report.uri)?.status === 'stale')
+                return
             this.diagrams.sendToDiagram(diagnosticHighlight, {
                 traceUris: issue.locations
                     .map((location) => location.traceUris ?? [])
@@ -97,9 +101,15 @@ export class DiagnosticBridge implements vscode.Disposable {
         const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(location.uri))
         if (location.uri === report.uri && document.version !== report.version) return
         const range = this.diagnostics.range(location, document)
+        const visible = vscode.window.visibleTextEditors.find((entry) => entry.document.uri.toString() === location.uri)
+        const group = vscode.window.tabGroups.all.find((entry) =>
+            entry.tabs.some(
+                (tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === location.uri
+            )
+        )
         const editor = await vscode.window.showTextDocument(document, {
             preview: true,
-            viewColumn: vscode.ViewColumn.Beside,
+            viewColumn: visible?.viewColumn ?? group?.viewColumn ?? vscode.ViewColumn.Beside,
             selection: range,
             preserveFocus: false,
         })

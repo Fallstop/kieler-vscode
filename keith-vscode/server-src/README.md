@@ -7,7 +7,7 @@ Jetty compatibility libraries and the unchanged language server. End users need
 only Java; building requires a JDK. A client-only checkout can still build without
 the untracked server JAR and uses legacy-message fallback diagnostics.
 
-`BuildPatch` uses the ASM already bundled in KIELER to add seven hooks. It checks
+`BuildPatch` uses the ASM already bundled in KIELER to add nine hooks. It checks
 each target method signature and fails the build if a server update changes it:
 
 - Begin compilation: capture original Xtext ranges and stop on compiler errors.
@@ -20,6 +20,8 @@ each target method signature and fails the build if a server update changes it:
 - C simulation template: retain incoming strings beyond their JSON message's lifetime.
   Equal strings are reused per model slot; distinct values stay alive until simulation
   exit because other model variables or host C can retain their pointers across ticks.
+- Diagram generation: publish KLighD's existing source associations as trace links.
+- Diagram refresh: skip queued updates whose view context has already been closed.
 
 `SnapshotDescription` retains the existing DTO methods and raw messages, and adds
 structured diagnostics. This is an additive protocol change. The patch does not

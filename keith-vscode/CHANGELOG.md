@@ -23,6 +23,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   unfinished edits and prevents controlling another model's simulation.
 - Uninitialized string inputs remain editable. The C simulation wrapper retains
   incoming strings so empty inputs and values copied into outputs survive later ticks.
+- Source links reuse the existing editor tab. Diagram highlighting returns to the
+  original SCCharts diagram and waits for its source links before selecting and
+  fitting the involved operations. Queued refreshes safely skip closed diagram contexts.
 
 ## [0.4.0] - 2026-09-07
 

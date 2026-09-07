@@ -19,6 +19,8 @@ public final class BuildPatch implements Opcodes {
             patch(jar, args[1], "kicool/kitt/tracing/TransformationTracing", "trace", "(Lorg/eclipse/emf/ecore/EObject;Lorg/eclipse/emf/ecore/EObject;)Lorg/eclipse/emf/ecore/EObject;", 4);
             patch(jar, args[1], "scg/processors/codegen/c/CCodeGeneratorLogicModule", "serializeToCode", "(L" + BASE + "scg/Assignment;IL" + BASE + "scg/processors/codegen/c/CCodeGeneratorStructModule;L" + BASE + "scg/processors/codegen/c/CCodeSerializeHRExtensions;)V", 5);
             patch(jar, args[1], "simulation/processor/CSimulationTemplateGenerator", "generateTemplate", "()L" + BASE + "kicool/compilation/CodeContainer;", 6);
+            patch(jar, args[1], "klighd/lsp/KGraphDiagramGenerator", "postProcess", "()V", 7);
+            patch(jar, args[1], "klighd/lsp/KGraphDiagramUpdater", "createModel", "(L" + BASE + "klighd/ViewContext;Ljava/lang/String;Lorg/eclipse/xtext/util/CancelIndicator;)Lorg/eclipse/sprotty/SGraph;", 8);
         }
     }
 
@@ -45,6 +47,16 @@ public final class BuildPatch implements Opcodes {
                         } else if (kind == 5) {
                             visitVarInsn(ALOAD, 0);
                             visitMethodInsn(INVOKESTATIC, "org/kieler/vscode/diagnostics/GeneratedTrace", "start", "(L" + BASE + "kicool/compilation/codegen/CodeGeneratorModule;)V", false);
+                        } else if (kind == 8) {
+                            // A queued refresh can outlive its closed/replaced diagram context.
+                            // The caller already treats a null model as a cancelled refresh.
+                            Label present = new Label();
+                            visitVarInsn(ALOAD, 1);
+                            visitJumpInsn(IFNONNULL, present);
+                            visitInsn(ACONST_NULL);
+                            visitInsn(ARETURN);
+                            visitLabel(present);
+                            visitFrame(F_SAME, 0, null, 0, null);
                         }
                     }
                     @Override public void visitInsn(int opcode) {
@@ -71,6 +83,9 @@ public final class BuildPatch implements Opcodes {
                         } else if (kind == 6 && opcode == ARETURN) {
                             visitInsn(DUP);
                             visitMethodInsn(INVOKESTATIC, "org/kieler/vscode/diagnostics/SimulationStrings", "retain", "(L" + BASE + "kicool/compilation/CodeContainer;)V", false);
+                        } else if (kind == 7 && opcode == RETURN) {
+                            visitVarInsn(ALOAD, 0);
+                            visitMethodInsn(INVOKESTATIC, "org/kieler/vscode/diagnostics/DiagramTrace", "populate", "(L" + target + ";)V", false);
                         }
                         super.visitInsn(opcode);
                     }

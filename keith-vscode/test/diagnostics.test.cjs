@@ -41,6 +41,33 @@ test('diagram selection matches the nearest traced action and never another sour
     assert.deepEqual(findDiagramElements(model, [['file:///missing.sctx#//@states.0']]), [])
 })
 
+test('highlight waits for source and reapplies locally when a stage switch replaces its element IDs', async () => {
+    let notification
+    const statuses = [], actions = []
+    const { DiagnosticHighlighter } = createLoader({ sprotty: {} })('src-webview/diagram/diagnostics/highlight.ts')
+    const highlighter = new DiagnosticHighlighter({ onNotification: (_, handler) => { notification = handler } }, message => statuses.push(message))
+    highlighter.connect(() => ({ dispatch: async action => actions.push(action) }))
+    highlighter.accept({ kind: 'setModel', newRoot: { id: 'scheduler', children: [] } })
+    notification({ traceUris: [[uri + '#action']] })
+    assert.equal(actions.length, 0)
+    highlighter.accept({ kind: 'updateModel', newRoot: { id: 'source', children: [{ id: 'action', trace: uri + '?1:0-1:4#action' }] } })
+    await new Promise(setImmediate)
+    assert.deepEqual(actions[0].selectedElementsIDs, ['action'])
+    assert.equal(actions[0].kind, 'diagnosticSelect', 'Never forward diagnostic selection to the server')
+    assert.equal(actions[1].kind, 'fit')
+    assert.match(statuses.at(-1), /Highlighted/)
+    highlighter.accept({ kind: 'updateModel', newRoot: { id: 'source', children: [] } })
+    await new Promise(setImmediate)
+    assert.equal(actions.length, 2)
+    highlighter.accept({ kind: 'updateModel', newRoot: { id: 'source', children: [{ id: 'replacement', trace: uri + '?1:0-1:4#action' }] } })
+    await new Promise(setImmediate)
+    assert.equal(actions[2].kind, 'diagnosticSelect')
+    assert.deepEqual(actions[2].selectedElementsIDs, ['replacement'])
+    assert.equal(actions[3].kind, 'fit')
+    assert.match(statuses.at(-1), /Highlighted/)
+    notification({ traceUris: [] })
+})
+
 test('failure panel exposes source, explanation and details, disables stale source actions', () => {
     const dom = new JSDOM('<div class="kv-root"><header class="kv-toolbar"></header></div>')
     for (const name of ['document', 'window', 'HTMLElement', 'Event']) global[name] = dom.window[name]

@@ -167,7 +167,7 @@ export class SimulationView {
         const resize = new ResizeObserver(() => {
             document.documentElement.style.setProperty(
                 '--kv-toolbar-offset',
-                `${this.toolbar.el.getBoundingClientRect().height}px`
+                `${container.getBoundingClientRect().top}px`
             )
             window.dispatchEvent(new Event('resize'))
         })

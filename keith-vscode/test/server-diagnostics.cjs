@@ -2,14 +2,17 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { tmpdir } = require('node:os')
-const { spawn } = require('node:child_process')
+const { spawn, spawnSync } = require('node:child_process')
 const { pathToFileURL } = require('node:url')
 const { createMessageConnection, StreamMessageReader, StreamMessageWriter } = require('vscode-jsonrpc/node')
 
 async function main() {
     const extension = path.resolve(__dirname, '..')
+    const classpath = ['diagnostics.jar', 'jetty10/*', 'kieler-language-server.jar'].map(file => path.join(extension, 'server', file)).join(path.delimiter)
+    const closedDiagram = spawnSync('java', ['-cp', classpath, path.join(__dirname, 'fixtures/DiagramRefreshCheck.java')], { encoding: 'utf8' })
+    assert.equal(closedDiagram.status, 0, closedDiagram.stderr)
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-diagnostics-'))
-    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', ['diagnostics.jar', 'jetty10/*', 'kieler-language-server.jar'].map(file => path.join(extension, 'server', file)).join(path.delimiter), 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: workspace })
+    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', classpath, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: workspace })
     const closed = new Promise(resolve => server.once('close', resolve))
     let stderr = ''
     server.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-12000) })
@@ -58,6 +61,25 @@ async function main() {
         assert.ok(!broken.stages.some(stage => stage.name === 'GCC Compiler'), 'Stop after scheduler errors')
         assert.ok(!fs.existsSync(path.join(broken.dir, 'kieler-gen/bin/simulation.exe')))
         console.log('Scheduler: one two-edge cycle, exact source ranges, diagram traces, no executable.')
+
+        const diagramReady = waitFor('diagram/accept', message => !!message.action?.newRoot)
+        await connection.sendNotification('diagram/accept', { clientId: 'keith-diagram_sprotty', action: { kind: 'requestModel', requestId: 'source-diagram', options: { sourceUri: broken.uri, diagramType: 'keith-diagram', needsClientLayout: false, needsServerLayout: true } } })
+        const diagram = (await diagramReady).action
+        const { findDiagramElements } = require('./load-typescript.cjs')({ sprotty: {}, 'sprotty-protocol': {} })('src-webview/diagram/diagnostics/highlight.ts')
+        const selected = findDiagramElements(diagram.newRoot, cycles[0].locations.map(location => location.traceUris))
+        assert.ok(selected.length >= 2 && selected.length <= 4, JSON.stringify(selected))
+        assert.ok(selected.some(id => id.includes('red')))
+        assert.ok(selected.some(id => id.includes('listening')))
+        console.log('Diagram: both conflict participants resolve to actual SCCharts diagram elements.')
+
+        const schedulerIndex = broken.stages.findIndex(stage => stage.diagnostics?.some(issue => issue.code === 'scheduling-cycle'))
+        for (const index of [schedulerIndex, -1, schedulerIndex, -1]) {
+            const shown = waitFor('diagram/accept', message => !!message.action?.newRoot)
+            assert.equal(await connection.sendRequest('keith/kicool/show', { uri: broken.uri, clientId: 'keith-diagram_sprotty', index }), 'OK')
+            await shown
+        }
+        assert.ok(!stderr.includes('NullPointerException'), stderr)
+        console.log('Diagram recovery: scheduler/source switching completes without stale-context failures.')
 
         const array = await compile('array', demo.replace('timeout_update = false;', ''))
         const cIssue = array.issues.find(issue => issue.code === 'c-compiler' && /array type.*not assignable|assignment to expression with array type/.test(issue.message))

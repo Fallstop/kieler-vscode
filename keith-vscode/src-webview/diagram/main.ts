@@ -26,8 +26,8 @@ import './diagnostics/diagnostics.css'
 
 import { bindServices, createKlighdDiagramContainer } from '@kieler/klighd-core'
 import { Container } from 'inversify'
-import { IActionDispatcher, KeyTool, TYPES } from 'sprotty'
-import { ActionMessage, isActionMessage } from 'sprotty-protocol'
+import { IActionDispatcher, KeyTool, onAction, SelectCommand, TYPES } from 'sprotty'
+import { ActionMessage, isActionMessage, SelectAction } from 'sprotty-protocol'
 import {
     SprottyDiagramIdentifier,
     SprottyStarter,
@@ -41,7 +41,7 @@ import { MessageConnection } from './message-connection'
 import { MessagePersistenceStorage } from './persistence-storage'
 import { SimulationView } from './simulation/view'
 import { DiagnosticView } from './diagnostics/view'
-import { DiagnosticHighlighter } from './diagnostics/highlight'
+import { DIAGNOSTIC_SELECT, DiagnosticHighlighter } from './diagnostics/highlight'
 /* global sessionStorage, window */
 
 /** Uses `klighd-core` and {@link SprottyStarter} to create a diagram container in a webview. */
@@ -66,7 +66,9 @@ export class KLighDSprottyStarter extends SprottyStarter {
         window.addEventListener('message', this.queueActionMessage)
         this.simulationView = new SimulationView(this.messenger)
         this.diagnosticView = new DiagnosticView(this.messenger)
-        this.diagnosticHighlighter = new DiagnosticHighlighter(this.messenger)
+        this.diagnosticHighlighter = new DiagnosticHighlighter(this.messenger, (message) =>
+            this.diagnosticView.showHighlightStatus(message)
+        )
     }
 
     override start(): void {
@@ -99,6 +101,11 @@ export class KLighDSprottyStarter extends SprottyStarter {
         const persistenceStorage = new MessagePersistenceStorage(this.messenger)
         const container = createKlighdDiagramContainer(diagramIdentifier.clientId)
         bindServices(container, { connection, sessionStorage, persistenceStorage })
+        onAction(
+            container,
+            DIAGNOSTIC_SELECT,
+            (action) => new SelectCommand({ ...action, kind: SelectAction.KIND } as SelectAction)
+        )
         this.diagnosticHighlighter.connect(() => container.get<IActionDispatcher>(TYPES.IActionDispatcher))
         connection.onMessageReceived((message) => this.diagnosticHighlighter.accept(message.action))
 

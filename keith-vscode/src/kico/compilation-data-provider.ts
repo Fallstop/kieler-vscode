@@ -505,16 +505,13 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
      * @param id id of snapshot e.g. Signal
      * @param index index of snapshot
      */
-    public show(uri: string, index: number): void {
-        this.lsClient.start().then(async () => {
-            this.indexMap.set(uri, index)
-            this.lsClient.sendRequest(SHOW, { uri, clientId: `${diagramType}_sprotty`, index })
-            // original model must not fire this emitter.
-            if (index !== -1) {
-                this.showedNewSnapshotEmitter.fire('Success')
-            }
-            return true
-        })
+    public async show(uri: string, index: number): Promise<void> {
+        await this.lsClient.start()
+        const result = await this.lsClient.sendRequest(SHOW, { uri, clientId: `${diagramType}_sprotty`, index })
+        if (result === 'ERR') throw new Error('The compiler diagram could not be opened.')
+        this.indexMap.set(uri, index)
+        // Original model must not fire this emitter.
+        if (index !== -1) this.showedNewSnapshotEmitter.fire('Success')
     }
 
     /**

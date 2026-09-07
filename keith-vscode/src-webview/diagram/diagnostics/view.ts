@@ -15,6 +15,13 @@ export class DiagnosticView {
 
     private key = ''
 
+    private readonly highlightStatus = h('p.kd-muted', { role: 'status', hidden: true })
+
+    showHighlightStatus(message: string): void {
+        this.highlightStatus.textContent = message
+        this.highlightStatus.hidden = !message
+    }
+
     constructor(private readonly messenger: Messenger) {
         const toolbar = document.querySelector('.kv-toolbar')
         toolbar?.after(this.el)
@@ -33,6 +40,7 @@ export class DiagnosticView {
         const key = JSON.stringify(report)
         if (key === this.key) return
         this.key = key
+        this.showHighlightStatus('')
         this.el.hidden = !report || (report.status === 'succeeded' && report.issues.length === 0)
         if (!report || this.el.hidden) {
             replaceChildren(this.el)
@@ -67,7 +75,13 @@ export class DiagnosticView {
                 h('summary', {}, `${warnings.length} warning${warnings.length === 1 ? '' : 's'}`),
                 ...warnings.map((issue) => this.issue(report, issue))
             )
-        replaceChildren(this.el, title, ...errors.map((issue) => this.issue(report, issue)), warningList)
+        replaceChildren(
+            this.el,
+            title,
+            ...errors.map((issue) => this.issue(report, issue)),
+            this.highlightStatus,
+            warningList
+        )
         window.dispatchEvent(new Event('resize'))
     }
 
@@ -126,7 +140,11 @@ export class DiagnosticView {
                 {},
                 locations.some((location) => location.traceUris?.length) &&
                     this.button('Highlight in diagram', () => send('highlight'), !usable),
-                this.button('Compiler stage', () => send('stage'), !usable),
+                this.button(
+                    issue.code === 'scheduling-cycle' ? 'View scheduler graph' : 'View compiler stage',
+                    () => send('stage'),
+                    !usable
+                ),
                 this.button('Technical details', () => send('details'))
             )
         )
