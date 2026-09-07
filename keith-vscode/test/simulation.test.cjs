@@ -250,3 +250,56 @@ test('counterexample readiness waits for simulation startup and terminates on fa
     await sim.handleSimulationStarted({ successful: false, error: 'compile failed' })
     assert.equal(await failed, false)
 })
+
+test('uninitialized strings are registered from the interface and accept their first input and output values', async (t) => {
+    const { sim, sent } = setup(t)
+    await sim.simulate()
+    await sim.handleSimulationStarted({
+        successful: true,
+        dataPool: { '#interface': {
+            timeout_update_vals: { type: 'string', properties: ['input'] },
+            echoed: { type: 'string', properties: ['output'] },
+        } },
+        propertySet: { input: ['timeout_update_vals'], output: ['echoed'] },
+    })
+    const input = sim.simulationData.get('timeout_update_vals')
+    assert.ok(input)
+    assert.equal(input.input, true)
+    assert.equal(sim.isVisible(input), true)
+    assert.equal(sim.simulationData.get('echoed').output, true)
+    assert.equal(sim.valuesForNextStep.get(input.id), '')
+    assert.equal(sim.changedValuesForNextStep.size, 0, 'Displaying an unset string must not send a default')
+    sim.setInputValue(input, 42)
+    assert.equal(sim.changedValuesForNextStep.size, 0)
+    const packet = '10,20,30,40,50,60\n'
+    sim.setInputValue(input, packet)
+    const step = sim.executeSimulationStep()
+    assert.equal(sent.at(-1).params.valuesForNextStep.timeout_update_vals, packet)
+    assert.equal(sim.handleStepMessage({ values: { timeout_update_vals: packet, echoed: packet } }), true)
+    await step
+    assert.equal(sim.phase, 'running')
+    assert.deepEqual(sim.simulationData.get('echoed').data, [packet])
+})
+
+test('null strings and string arrays stay editable across server updates without replacing queued edits', async (t) => {
+    const { sim } = setup(t)
+    await sim.simulate()
+    await sim.handleSimulationStarted({
+        successful: true,
+        dataPool: { text: null, messages: [null, 'initial'], '#interface': {
+            text: { type: 'string' }, messages: { type: 'string' },
+        } },
+        propertySet: { input: ['text', 'messages'] },
+    })
+    assert.equal(sim.valuesForNextStep.get('text'), '')
+    assert.deepEqual(sim.valuesForNextStep.get('messages'), ['', 'initial'])
+    sim.setInputValue(sim.simulationData.get('messages'), ['one', 'two'])
+    assert.deepEqual(sim.valuesForNextStep.get('messages'), ['one', 'two'])
+    sim.handleExternalNewUserValue({ text: 'external', messages: [null, null] })
+    assert.deepEqual(sim.valuesForNextStep.get('messages'), ['one', 'two'])
+    sim.handleStepMessage({ values: { text: null } })
+    assert.equal(sim.valuesForNextStep.get('text'), '')
+    sim.setInputValue(sim.simulationData.get('text'), 'next')
+    sim.handleStepMessage({ values: { text: null } })
+    assert.equal(sim.valuesForNextStep.get('text'), 'next')
+})

@@ -60,6 +60,7 @@ import {
 } from './helper'
 import { SimulationPhase } from './protocol'
 import { isCompatibleInput } from './input-value'
+import { inputValue, readDataPool } from './data-pool'
 import { StepController } from './step-controller'
 import { waitForVisualization } from './visualization'
 
@@ -717,7 +718,7 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.simulationStatus.show()
 
         // Get the start configuration for the simulation
-        const pool: Map<string, unknown> = new Map(Object.entries(startMessage.dataPool))
+        const pool = readDataPool(startMessage.dataPool)
         const propertySet: Map<string, string[]> = new Map(Object.entries(startMessage.propertySet))
         // Inputs and outputs are handled separately
         let inputs: string[] | undefined = propertySet.get('input')
@@ -726,7 +727,7 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         outputs = outputs === undefined ? [] : outputs
         // Construct list of all categories
         this.categories = Array.from(propertySet.keys())
-        pool.forEach((value, key) => {
+        pool.forEach(({ value, type }, key) => {
             // Add list of properties to SimulationData
             const categoriesList: string[] = []
             propertySet.forEach((list, propertyKey) => {
@@ -741,11 +742,12 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
                 input: inputs?.includes(key) ?? false,
                 output: outputs?.includes(key) ?? false,
                 categories: categoriesList,
+                type,
             }
             this.simulationData.set(key, newData)
             // Set the value for which will be set for the next step for inputs
             if (inputs?.includes(key)) {
-                this.valuesForNextStep.set(key, value)
+                this.valuesForNextStep.set(key, inputValue(value, type))
                 // Timed models never advance with Δt at 0, so start with the last Δt the user
                 // chose in this workspace, or one time unit per tick.
                 if (isTimeDelta(newData) && typeof value === 'number') {
@@ -978,7 +980,7 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
             const value = present ? message.values[key] : history.data[history.data.length - 1]
             history.data.push(value)
             if (present && history.input && !this.changedValuesForNextStep.has(key)) {
-                this.valuesForNextStep.set(key, value)
+                this.valuesForNextStep.set(key, inputValue(value, history.type))
             }
         })
         this.simulationStep++
@@ -990,8 +992,10 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
     handleExternalNewUserValue(values: unknown): void {
         if (!this.simulationRunning || !values || typeof values !== 'object' || Array.isArray(values)) return
         Object.entries(values).forEach(([id, value]) => {
+            const entry = this.simulationData.get(id)
+            value = inputValue(value, entry?.type)
             if (
-                this.simulationData.get(id)?.input &&
+                entry?.input &&
                 !this.changedValuesForNextStep.has(id) &&
                 isCompatibleInput(value, this.valuesForNextStep.get(id))
             ) {
@@ -1134,6 +1138,7 @@ export class SimulationData {
         public data: unknown[],
         public input: boolean,
         public output: boolean,
-        public categories: string[]
+        public categories: string[],
+        public type?: string
     ) {}
 }
