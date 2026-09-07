@@ -18,24 +18,19 @@
 import { connect, NetConnectOpts, Socket } from 'net'
 import * as path from 'path'
 import * as vscode from 'vscode'
-import { LanguageClient, LanguageClientOptions, ServerOptions, StreamInfo } from 'vscode-languageclient/node'
+import { LanguageClient, LanguageClientOptions, ServerOptions, State, StreamInfo } from 'vscode-languageclient/node'
 import { Settings, settingsKey } from './constants'
 import { KeithErrorHandler } from './error-handler'
+import { DiagramController } from './diagram/diagram-controller'
+import { REQUEST_CS } from './kico/commands'
 import { CompilationDataProvider } from './kico/compilation-data-provider'
 import { ModelCheckerDataProvider } from './model-checker/model-checker-data-provider'
 import { registerStpaCommands } from './pasta/stpa-interaction'
-import { handlePerformAction, performActionKind } from './perform-action-handler'
+import { handlePerformAction, PerformActionAction, performActionKind } from './perform-action-handler'
 import { SettingsService } from './settings'
 import { RESTART_LANGUAGE_SERVER } from './simulation/commands'
 import { SimulationTableDataProvider } from './simulation/simulation-table-data-provider'
 // import 'simulation/index.css'
-
-/** Command identifiers that are provided by klighd-vscode. */
-const klighdCommands = {
-    setLanguageClient: 'klighd-vscode.setLanguageClient',
-    addActionHandler: 'klighd-vscode.addActionHandler',
-    dispatchAction: 'klighd-vscode.dispatchAction',
-}
 
 /**
  * All file endings of the languages that are supported by keith-vscode.
@@ -118,10 +113,7 @@ async function restartLanguageServer(simulation: SimulationTableDataProvider): P
                 await lsClient.restart()
             } catch (error) {
                 vscode.window.showErrorMessage(`KIELER language server failed to restart: ${error}`)
-                return
             }
-            // Ask open diagrams to re-request their model from the fresh server.
-            await vscode.commands.executeCommand('klighd-vscode.diagram.refresh').then(undefined, () => undefined)
         }
     )
     vscode.window.setStatusBarMessage('$(check) KIELER language server restarted', 5000)
@@ -152,10 +144,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const defaultErrorHandler = lsClient.createDefaultErrorHandler()
     lsClient.clientOptions.errorHandler = new KeithErrorHandler(defaultErrorHandler)
 
-    // Inform the KLighD extension about the LS client and supported file endings.
-    await vscode.commands.executeCommand<string>(klighdCommands.setLanguageClient, lsClient, supportedFileEndings)
-    // Intercept PerformActionActions from klighd diagrams.
-    vscode.commands.executeCommand(klighdCommands.addActionHandler, performActionKind, handlePerformAction)
+    // Diagrams are part of this extension now (merged from klighd-vscode), so no other
+    // extension has to be handed the language client.
+    const diagrams = new DiagramController(context, lsClient, supportedFileEndings)
+    diagrams.addActionHandler(performActionKind, (action) => handlePerformAction(action as PerformActionAction))
 
     // create SettingsService with list of setting-keys to manage
     settingsService = new SettingsService<Settings>(settingsKey, [
@@ -200,6 +192,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         simulationDataProvider
     )
     vscode.window.registerWebviewViewProvider('kieler-model-checker', modelCheckerDataProvider)
+
+    // After a restart (manual or automatic) the compiler panel must learn the fresh server's systems.
+    let serverStarts = 0
+    context.subscriptions.push(
+        lsClient.onDidChangeState((event) => {
+            if (event.newState !== State.Running) {
+                return
+            }
+            serverStarts++
+            if (serverStarts > 1) {
+                vscode.commands.executeCommand(REQUEST_CS.command)
+            }
+        })
+    )
 
     // eslint-disable-next-line no-console
     console.debug('Starting Language Server...')

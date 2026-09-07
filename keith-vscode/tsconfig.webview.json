@@ -1,0 +1,9 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "rootDir": ".",
+        "declaration": false,
+        "noEmit": false
+    },
+    "include": ["src-webview/diagram", "src/diagram/storage/messages.ts"]
+}

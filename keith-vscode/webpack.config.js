@@ -118,4 +118,43 @@ const simulationWebview = {
     }
 };
 
-module.exports = [config, verificationWebview, simulationWebview];
+
+/**
+ * Bundles the KLighD diagram webview (merged from klighd-vscode). sprotty-vscode loads it from
+ * `pack/webview.js`, and the codicon font it pulls in is emitted next to it.
+ * @type {import('webpack').Configuration}
+ */
+const diagramWebview = {
+    target: "web",
+    mode: "none",
+    entry: path.resolve(__dirname, "src-webview/diagram/main.ts"),
+    output: {
+        filename: "webview.js",
+        path: path.resolve(__dirname, "pack"),
+    },
+    devtool: "nosources-source-map",
+    resolve: {
+        extensions: [".ts", ".js"],
+    },
+    module: {
+        rules: [
+            {
+                test: /\.ts$/,
+                exclude: /node_modules/,
+                use: [{ loader: "ts-loader", options: { configFile: path.resolve(__dirname, "tsconfig.webview.json") } }],
+            },
+            {
+                test: /\.css$/,
+                use: ["style-loader", "css-loader"],
+            },
+            {
+                test: /\.(ttf)$/,
+                type: "asset/resource",
+            },
+        ],
+    },
+    plugins: [new webpack.WatchIgnorePlugin({ paths: [/\.d\.ts$/] })],
+};
+
+module.exports = [config, verificationWebview, simulationWebview, diagramWebview];
+;
