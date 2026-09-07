@@ -68,6 +68,9 @@ export const valuesForNextStepMessageType = 'keith/simulation/valuesForNextStep'
 export const externalStopMessageType = 'keith/simulation/externalStop'
 export const startedSimulationMessageType = 'keith/simulation/started'
 
+/** Workspace-state key remembering the Δt a user last set, reused when the next simulation starts. */
+const DELTA_T_KEY = 'keith.simulation.deltaT'
+
 export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
     public readonly newSimulationDataEmitter = new vscode.EventEmitter<this>()
 
@@ -430,6 +433,9 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
      * Queues a new input value for the next tick and reflects it in the table.
      */
     setInputValue(simulationData: SimulationData, value: unknown): void {
+        if (isTimeDelta(simulationData) && typeof value === 'number' && value > 0) {
+            this.context.workspaceState.update(DELTA_T_KEY, value)
+        }
         if (
             !this.simulationRunning ||
             this.phase !== 'running' ||
@@ -740,10 +746,15 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
             // Set the value for which will be set for the next step for inputs
             if (inputs?.includes(key)) {
                 this.valuesForNextStep.set(key, value)
-                // Timed models never advance with Δt at 0, so start with one time unit per tick.
-                if (isTimeDelta(newData) && typeof value === 'number' && value === 0) {
-                    this.valuesForNextStep.set(key, 1)
-                    this.changedValuesForNextStep.set(key, 1)
+                // Timed models never advance with Δt at 0, so start with the last Δt the user
+                // chose in this workspace, or one time unit per tick.
+                if (isTimeDelta(newData) && typeof value === 'number') {
+                    const remembered = this.context.workspaceState.get<number>(DELTA_T_KEY)
+                    const initial = typeof remembered === 'number' && remembered > 0 ? remembered : value || 1
+                    if (initial !== value) {
+                        this.valuesForNextStep.set(key, initial)
+                        this.changedValuesForNextStep.set(key, initial)
+                    }
                 }
             }
         })
