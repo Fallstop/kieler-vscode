@@ -93,12 +93,30 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
         uri: vscode.Uri,
         options: { diagramType?: string; reveal?: boolean; preserveFocus?: boolean } = {}
     ): Promise<WebviewEndpoint | undefined> {
+        this.pruneDisposedEndpoints()
         const endpoint = await super.openDiagram(uri, options)
         if (endpoint) {
             this.lastUri = uri
             vscode.commands.executeCommand('setContext', contextKeys.diagramOpen, true)
         }
         return endpoint
+    }
+
+    /** Drops endpoints whose panel VS Code has disposed without telling us. */
+    private pruneDisposedEndpoints(): void {
+        for (const endpoint of [...this.endpoints]) {
+            const panel = endpoint.webviewContainer
+            let disposed = false
+            try {
+                // Any property access on a disposed WebviewPanel throws.
+                disposed = isWebviewPanel(panel) && panel.visible === undefined
+            } catch {
+                disposed = true
+            }
+            if (disposed) {
+                super.didCloseWebview(endpoint)
+            }
+        }
     }
 
     /**
@@ -122,6 +140,8 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
             })
             // Disposal is reported asynchronously; wait until the manager has dropped the endpoints.
             await waitUntil(() => this.endpoints.length === 0, 2000)
+            this.pruneDisposedEndpoints()
+            this.endpoints.length = 0
             if (uri) {
                 this.lastViewColumn = column
                 await this.openDiagram(uri, { reveal: true, preserveFocus: true })
@@ -195,10 +215,8 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
     }
 
     protected override didCloseWebview(endpoint: WebviewEndpoint): void {
-        const panel = endpoint.webviewContainer
-        if (isWebviewPanel(panel)) {
-            this.lastViewColumn = panel.viewColumn ?? this.lastViewColumn
-        }
+        // The panel is already disposed here; reading its view column would throw and leave the
+        // dead endpoint registered, which is why the diagram could never be reopened.
         super.didCloseWebview(endpoint)
         if (this.endpoints.length === 0) {
             vscode.commands.executeCommand('setContext', contextKeys.diagramOpen, false)

@@ -49,8 +49,9 @@ export function registerCommands(manager: KLighDWebviewPanelManager, context: vs
             const uri = getURI(commandArgs)
             if (uri) {
                 manager.storageService.setItem('diagramOpen', true)
+                const preserveFocus = commandArgs.some((arg) => arg && typeof arg === 'object' && arg.preserveFocus)
                 try {
-                    await manager.openDiagram(uri, { reveal: true })
+                    await manager.openDiagram(uri, { reveal: true, preserveFocus })
                 } catch (error) {
                     vscode.window.showErrorMessage(`Could not open the diagram: ${error}`)
                 }

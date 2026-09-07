@@ -628,6 +628,12 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         if (this.view) {
             this.view.show(true)
         }
+        // The diagram highlights the active states, so bring it up next to the model being simulated.
+        if (this.kico.lastCompiledUri) {
+            vscode.commands.executeCommand('keith-vscode.diagram.open', vscode.Uri.parse(this.kico.lastCompiledUri), {
+                preserveFocus: true,
+            })
+        }
     }
 
     /**

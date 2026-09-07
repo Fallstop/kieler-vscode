@@ -407,8 +407,8 @@
       },
       {
         "command": "keith-vscode.diagram.open",
-        "title": "Open in Diagram",
-        "icon": "$(symbol-structure)",
+        "title": "Open Diagram Preview",
+        "icon": "$(open-preview)",
         "category": "KIELER Diagram"
       }
     ],
@@ -572,7 +572,7 @@
         {
           "when": "resourceLangId in keith-vscode.languages",
           "command": "keith-vscode.diagram.open",
-          "group": "navigation@300000"
+          "group": "navigation@1"
         },
         {
           "command": "keith-vscode.simulation-step",
@@ -703,22 +703,12 @@
         {
           "command": "keith-vscode.restart-language-server",
           "when": "view == kieler-model-checker",
-          "group": "navigation@9"
+          "group": "9_restart"
         },
         {
           "command": "keith-vscode.restart-language-server",
           "when": "view == kieler-simulation-table",
-          "group": "navigation@9"
-        },
-        {
-          "command": "keith-vscode.diagram.restart",
-          "when": "view == kieler-kico && keith-vscode.diagramOpen",
-          "group": "navigation@8"
-        },
-        {
-          "command": "keith-vscode.diagram.restart",
-          "when": "view == kieler-simulation-table && keith-vscode.diagramOpen",
-          "group": "navigation@8"
+          "group": "9_restart"
         }
       ]
     },
@@ -835,6 +825,11 @@
         "command": "keith-vscode.diagram.restart",
         "key": "ctrl+alt+d",
         "when": "keith-diagram-focused || keith-vscode.diagramOpen"
+      },
+      {
+        "command": "keith-vscode.diagram.open",
+        "key": "ctrl+alt+v",
+        "when": "resourceLangId in keith-vscode.languages"
       }
     ]
   },
