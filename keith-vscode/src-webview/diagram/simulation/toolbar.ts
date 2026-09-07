@@ -17,7 +17,7 @@
 
 /* global document, HTMLElement, HTMLInputElement, KeyboardEvent */
 
-import { SimulationVariableState, SimulationViewCommand, SimulationViewState } from '../../../src/simulation/protocol'
+import { SimulationViewCommand, SimulationViewState } from '../../../src/simulation/protocol'
 import { h, icon, replaceChildren } from './dom'
 
 const SLOWEST_MS = 2000
@@ -59,7 +59,6 @@ export class Toolbar {
             state.stepDelay,
             state.showInternal,
             this.host.drawerOpen(),
-            timeDeltaOf(state)?.next,
         ])
         if (key === this.renderKey) {
             // Only the tick moved; patching it in place keeps focus and avoids any layout shift.
@@ -166,44 +165,7 @@ export class Toolbar {
                 h('span.kv-tick-value', {}, String(state.tick)),
                 h(`span.kv-live${state.playing ? '.kv-live-on' : ''}`, { title: 'Ticks are running automatically' })
             ),
-            this.delay(state),
-            this.timeDelta(state)
-        )
-    }
-
-    /** "Δt [1]": the time that passes per tick, which timed models need to be nonzero to advance. */
-    private timeDelta(state: SimulationViewState): HTMLElement | null {
-        const variable = timeDeltaOf(state)
-        if (!variable || typeof variable.next !== 'number') {
-            return null
-        }
-        const title = `Time that passes per tick (${variable.label}). Clocks only advance while this is above 0.`
-        const input = h('input.kv-delay-ms.kv-delta', {
-            type: 'number',
-            min: 0,
-            step: 'any',
-            value: variable.next,
-            title,
-            'aria-label': 'Time per tick',
-            'data-control': 'delta-t',
-            onchange: (event) => {
-                const value = Number((event.target as HTMLInputElement).value)
-                if (Number.isFinite(value) && value >= 0) {
-                    this.host.send({ kind: 'setInput', id: variable.id, value })
-                }
-            },
-            onkeydown: (event) => {
-                if ((event as KeyboardEvent).key === 'Enter') (event.target as HTMLInputElement).blur()
-                event.stopPropagation()
-            },
-        })
-        return h(
-            `div.kv-delay${variable.pending ? '.kv-delta-pending' : ''}`,
-            { title },
-            h('span.kv-delay-label', {}, 'Δt'),
-            input,
-            variable.next === 0 &&
-                h('span.kv-delta-warn', { title: 'Clocks will not advance while Δt is 0' }, icon('warning'))
+            this.delay(state)
         )
     }
 
@@ -315,8 +277,4 @@ export class Toolbar {
             h('span.kv-btn-label', {}, label)
         )
     }
-}
-
-function timeDeltaOf(state: SimulationViewState): SimulationVariableState | undefined {
-    return state.variables.find((variable) => variable.timeDelta && variable.role === 'input')
 }

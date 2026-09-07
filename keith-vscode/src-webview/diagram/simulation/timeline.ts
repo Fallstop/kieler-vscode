@@ -68,7 +68,7 @@ export class Timeline {
 
     constructor(
         private readonly send: (command: SimulationViewCommand) => void,
-        private readonly formats: FormatStore
+        private readonly formats: FormatStore = { get: () => 'dec', cycle: () => undefined }
     ) {}
 
     render(state: SimulationViewState): void {
@@ -302,7 +302,7 @@ function valueNode(value: unknown, format: NumberFormat): HTMLElement {
 }
 
 /** Parse `text` as the same kind of value as `like`; undefined when it does not fit. */
-export function parseLike(text: string, like: unknown, format: NumberFormat): unknown {
+export function parseLike(text: string, like: unknown, format: NumberFormat = 'dec'): unknown {
     const trimmed = text.trim()
     if (typeof like === 'number') {
         return parseNumber(trimmed, format)

@@ -63,7 +63,7 @@ function fact(label: string, title: string, chips: HTMLElement[], empty = 'none'
 }
 
 /** One line about what the last tick did, above the trace table. Explanations live in tooltips. */
-export function renderSummary(state: SimulationViewState, formatFor: FormatFor): HTMLElement {
+export function renderSummary(state: SimulationViewState, formatFor: FormatFor = () => 'dec'): HTMLElement {
     const visible = state.variables.filter((variable) => !variable.internal || state.showInternal)
     const queued = visible.filter((variable) => variable.pending)
     const queuedFact =

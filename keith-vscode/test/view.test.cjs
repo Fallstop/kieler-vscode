@@ -35,8 +35,7 @@ test('numeric parsing rejects partial binary values and non-finite numbers', () 
 
 test('JSON inputs retain their shape and remain editable when numbers display in hex', () => {
     const { Timeline, parseLike } = load('src-webview/diagram/simulation/timeline.ts')
-    load('src-webview/diagram/simulation/format.ts').setNumberFormat('hex')
-    const timeline = new Timeline(() => {})
+    const timeline = new Timeline(() => {}, { get: () => 'hex', cycle() {} })
     document.body.append(timeline.el)
     timeline.render(state({ variables: [input([10, 20])] }))
     assert.equal(timeline.el.querySelector('input').value, '[10,20]')
@@ -93,16 +92,16 @@ test('boolean inputs keep keyboard focus across tick updates', () => {
 
 test('tick updates leave speed sliders and number selectors mounted and focused', () => {
     const { Toolbar } = load('src-webview/diagram/simulation/toolbar.ts')
-    const toolbar = new Toolbar({ send() {}, toggleDrawer() {}, toggleHints() {}, drawerOpen: () => true, hintsOn: () => true, numberFormat: () => 'dec' })
+    const toolbar = new Toolbar({ send() {}, toggleDrawer() {}, drawerOpen: () => true })
     document.body.append(toolbar.el)
     toolbar.render(state({ playing: true }))
     const slider = toolbar.el.querySelector('input')
-    const select = toolbar.el.querySelector('select')
+    const select = toolbar.el.querySelector('.kv-delay-ms')
     slider.focus()
     slider.value = '75'
     toolbar.render(state({ tick: 1, playing: true }))
     assert.equal(toolbar.el.querySelector('input'), slider)
-    assert.equal(toolbar.el.querySelector('select'), select)
+    assert.equal(toolbar.el.querySelector('.kv-delay-ms'), select)
     assert.equal(document.activeElement, slider)
     assert.equal(slider.value, '75')
     assert.equal(toolbar.el.querySelector('.kv-tick-value').textContent, '1')
@@ -112,7 +111,7 @@ test('tick updates leave speed sliders and number selectors mounted and focused'
 test('first-tick numeric outputs appear and sustained true outputs are never labelled off', () => {
     const { renderSummary } = load('src-webview/diagram/simulation/summary.ts')
     const output = { ...input(), label: 'Count', role: 'output', history: [7] }
-    assert.match(renderSummary(state({ tick: 1, variables: [output] })).textContent, /Count = 7/)
+    assert.match(renderSummary(state({ tick: 1, variables: [output] })).textContent, /Count=7/)
     output.label = 'Signal'
     output.history = [true, true]
     const summary = renderSummary(state({ tick: 2, variables: [output] }))
@@ -129,7 +128,7 @@ test('Space respects buttons and selectors, ignores key repeats, and hidden view
     const step = document.querySelector('[aria-label="Step"]')
     const key = (target, options = {}) => target.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true, ...options }))
     key(step)
-    key(document.querySelector('select'))
+    key(document.querySelector('.kv-delay-ms'))
     key(document.body, { repeat: true })
     assert.equal(sent.length, 0)
     key(document.body)

@@ -76,7 +76,7 @@ function printable(code: number): string {
  * always accepted, and a bare digit string is read in the variable's format. Undefined when it is
  * not a number.
  */
-export function parseNumber(text: string, format: NumberFormat): number | undefined {
+export function parseNumber(text: string, format: NumberFormat = 'dec'): number | undefined {
     const trimmed = text.trim()
     if (trimmed === '') {
         return undefined
@@ -87,26 +87,30 @@ export function parseNumber(text: string, format: NumberFormat): number | undefi
     }
     const prefixed = trimmed.match(/^(-?)0([xXbB])([0-9a-fA-F]+)$/)
     if (prefixed) {
-        const radix = prefixed[2].toLowerCase() === 'x' ? 16 : 2
-        const parsed = parseInt(prefixed[3], radix)
-        return Number.isNaN(parsed) ? undefined : prefixed[1] ? -parsed : parsed
+        // parseInt would stop at the first bad digit, so the digits are checked for the radix first.
+        const hex = prefixed[2].toLowerCase() === 'x'
+        return radixOrUndefined(`${prefixed[1]}${prefixed[3]}`, hex ? 16 : 2, hex ? /^-?[0-9a-fA-F]+$/ : /^-?[01]+$/)
     }
     switch (format) {
         case 'hex':
-            return radixOrUndefined(trimmed, 16, /^-?[0-9a-fA-F]+$/)
+            return radixOrUndefined(trimmed, 16, /^-?[0-9a-fA-F]+$/) ?? finiteOrUndefined(trimmed)
         case 'bin':
-            return radixOrUndefined(trimmed, 2, /^-?[01]+$/)
+            return radixOrUndefined(trimmed, 2, /^-?[01]+$/) ?? finiteOrUndefined(trimmed)
         case 'char':
             // A single character means its code; digits still mean a decimal number.
-            if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-                return Number(trimmed)
-            }
-            return codePointOf(trimmed)
-        default: {
-            const decimal = Number(trimmed)
-            return Number.isNaN(decimal) ? undefined : decimal
-        }
+            return finiteOrUndefined(trimmed) ?? codePointOf(trimmed)
+        default:
+            return finiteOrUndefined(trimmed)
     }
+}
+
+/** Decimal numbers only; floats and exponents pass, Infinity and NaN do not. */
+function finiteOrUndefined(text: string): number | undefined {
+    if (!/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(text)) {
+        return undefined
+    }
+    const value = Number(text)
+    return Number.isFinite(value) ? value : undefined
 }
 
 function radixOrUndefined(text: string, radix: number, pattern: RegExp): number | undefined {
@@ -122,6 +126,10 @@ function codePointOf(text: string): number | undefined {
     const unescaped = { '\\n': 0x0a, '\\t': 0x09, '\\r': 0x0d, '\\0': 0x00 }[text]
     if (unescaped !== undefined) {
         return unescaped
+    }
+    const hex = text.match(/^\\x([0-9a-fA-F]{2})$/)
+    if (hex) {
+        return parseInt(hex[1], 16)
     }
     const codePoints = Array.from(text)
     return codePoints.length === 1 ? codePoints[0].codePointAt(0) : undefined

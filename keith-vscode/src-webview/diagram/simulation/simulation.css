@@ -303,19 +303,6 @@ body .sidebar {
     outline-offset: -1px;
 }
 
-.kv-delta {
-    width: 4ch;
-}
-
-.kv-delta-pending .kv-delta {
-    box-shadow: inset 2px 0 0 var(--kv-queued);
-}
-
-.kv-delta-warn {
-    display: inline-flex;
-    color: var(--vscode-editorWarning-foreground, var(--kv-queued));
-}
-
 .kv-delay-slider {
     width: 70px;
     margin: 0;
