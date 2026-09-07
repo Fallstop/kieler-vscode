@@ -10,7 +10,7 @@
     },
     "homepage": "https://rtsys.informatik.uni-kiel.de/kieler",
     "engines": {
-        "node": "16.x",
+        "node": "24.x",
         "yarn": "^1.22.10"
     },
     "workspaces": [
@@ -19,6 +19,7 @@
     "scripts": {
         "clean": "lerna run clean --parallel",
         "lint": "lerna run lint --parallel",
+        "lint-fix": "lerna run lint-fix --parallel",
         "prebuild": "yarn clean",
         "build": "lerna run build",
         "watch": "lerna run watch --parallel",
@@ -28,6 +29,6 @@
     "dependencies": {},
     "devDependencies": {
         "lerna": "^4.0.0",
-        "typescript": "^5.3.3"
+        "typescript": "^6.0.0"
     }
 }
