@@ -8,6 +8,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [0.5.1] - 2026-09-08
 
+- Renamed to SCCharts Lab with a new icon and published under the `qinnovate` publisher as an
+  independent fork of KIELER VS Code. `yarn fetch-server` downloads and verifies the
+  untracked language server and Jetty libraries; pushing a `vX.Y.Z` tag builds, tests, and
+  publishes a GitHub release, the Marketplace, and optionally Open VSX.
+- Refuses to activate beside the original KIELER VS Code extension, which registers the same
+  commands and views, and offers to show it so it can be disabled.
 - The compiler's "Instantaneous loop detected!" warning now names the operations on the
   loop, links to them, explains when it is advisory (a clock or variable reset on every
   transition of a delayed cycle) and how to break a real loop. When the scheduler rejects

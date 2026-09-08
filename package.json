@@ -2,7 +2,7 @@
     "name": "keith",
     "version": "0.1.0",
     "private": true,
-    "description": "KIEL Environment Integrated in Theia",
+    "description": "SCCharts Lab: fork of KIELER VS Code",
     "author": "KIELER <kieler@rtsys.informatik.uni-kiel.de>",
     "license": "EPL-2.0",
     "bugs": {

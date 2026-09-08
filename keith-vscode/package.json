@@ -1,23 +1,36 @@
 {
-  "name": "keith-vscode",
-  "displayName": "KIELER VS Code",
-  "description": "KIELER for VS Code: SCCharts editing, diagrams, simulation and verification in one extension (CS303 build)",
+  "name": "sccharts-lab",
+  "displayName": "SCCharts Lab",
+  "description": "Edit, visualise, simulate tick by tick, and debug SCCharts models in VS Code. Independent fork of the KIELER VS Code extension (keith-vscode).",
   "version": "0.5.1",
-  "publisher": "kieler",
-  "author": "KIELER <kieler@rtsys.informatik.uni-kiel.de>",
+  "publisher": "qinnovate",
+  "author": "Jasper Miller-Waugh",
+  "contributors": [
+    "KIELER <kieler@rtsys.informatik.uni-kiel.de>"
+  ],
   "icon": "icon.png",
   "license": "EPL-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kieler/vscode"
+    "url": "https://github.com/Fallstop/kieler-vscode"
   },
-  "homepage": "https://rtsys.informatik.uni-kiel.de/kieler",
+  "bugs": {
+    "url": "https://github.com/Fallstop/kieler-vscode/issues"
+  },
+  "homepage": "https://github.com/Fallstop/kieler-vscode#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "Programming Languages",
     "Other"
+  ],
+  "keywords": [
+    "sccharts",
+    "kieler",
+    "statecharts",
+    "synchronous",
+    "simulation"
   ],
   "activationEvents": [
     "onView:kieler",
@@ -847,9 +860,10 @@
     "test:server": "npm run build:server && node test/server-smoke.cjs && node test/server-diagnostics.cjs",
     "build": "node scripts/build-server-patch.cjs && webpack --mode production",
     "watch": "webpack --watch",
-    "package": "vsce package --yarn -o keith-vscode.vsix",
+    "package": "vsce package --yarn -o sccharts-lab.vsix",
     "vscode:prepublish": "yarn run build",
-    "build:server": "node scripts/build-server-patch.cjs --required"
+    "build:server": "node scripts/build-server-patch.cjs --required",
+    "fetch-server": "node scripts/fetch-server.cjs"
   },
   "devDependencies": {
     "@types/node": "^16.11.7",
@@ -874,9 +888,10 @@
     "source-map-loader": "^3.0.0",
     "style-loader": "^3.3.3",
     "ts-loader": "^9.5.1",
-    "vsce": "1.95.1",
     "webpack": "^5.89.0",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^5.1.4",
+    "@vscode/vsce": "^3.6.0",
+    "ovsx": "^0.10.5"
   },
   "dependencies": {
     "@kieler/klighd-core": "^0.8.1",

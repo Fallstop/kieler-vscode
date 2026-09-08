@@ -21,6 +21,7 @@ import * as vscode from 'vscode'
 import { LanguageClient, LanguageClientOptions, ServerOptions, State, StreamInfo } from 'vscode-languageclient/node'
 import { Settings, settingsKey } from './constants'
 import { KeithErrorHandler } from './error-handler'
+import { reportConflictingExtensions } from './conflicts'
 import { DiagramController } from './diagram/diagram-controller'
 import { REQUEST_CS } from './kico/commands'
 import { CompilationDataProvider } from './kico/compilation-data-provider'
@@ -122,6 +123,9 @@ async function restartLanguageServer(simulation: SimulationTableDataProvider): P
 
 // this method is called when your extension is activated
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    if (await reportConflictingExtensions()) {
+        return
+    }
     registerStpaCommands(context)
 
     // Create context key of supported languages

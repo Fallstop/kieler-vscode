@@ -1,19 +1,20 @@
-# KEITH
+# SCCharts Lab
 
-This monorepo is the home of the KIELER VS Code project. It mainly consists of a Visual Studio Code extension.
+This monorepo is the home of SCCharts Lab, an independent fork of the KIELER VS Code extension
+(originally KEITH). It mainly consists of a Visual Studio Code extension.
 
 ## Packages
 
--   [keith-vscode](./keith-vscode): VS Code extension that adds support for multiple KIELER
-    languages in VS Code.
+-   [keith-vscode](./keith-vscode): the SCCharts Lab VS Code extension (SCCharts diagrams,
+    simulation and diagnostics, plus the other KIELER languages).
 
 ## Requirements
 
 Development of this project requires [Node.js _v24.x_](https://nodejs.org) and
-[yarn _v1.x_](https://classic.yarnpkg.com/). Further, language server jars, named
-`kieler-language-server.jar`, have to placed in the `keith-vscode/server` folder to develop
-the VS Code extension. The latest jars can be downloaded
-[here](https://rtsys.informatik.uni-kiel.de/~kieler/files/nightly/sccharts/ls/).
+[yarn _v1.x_](https://classic.yarnpkg.com/). Further, the language server jar and its
+Jetty libraries have to be present in `keith-vscode/server`. Run
+`yarn workspace keith-vscode fetch-server` to download and verify them against
+`keith-vscode/server/manifest.json`.
 
 Diagram support is included. Building the bundled server diagnostic patch requires
 a JDK 11 or newer. See [the patch documentation](keith-vscode/server-src/README.md)

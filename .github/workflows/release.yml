@@ -1,0 +1,81 @@
+# Builds, verifies, and publishes the extension when a version tag (v1.2.3) is pushed.
+# The tag must equal keith-vscode/package.json "version". Requires the VSCE_PAT secret
+# (Azure DevOps token, Marketplace > Manage scope). OVSX_PAT is optional for Open VSX.
+
+name: release
+
+on:
+    push:
+        tags: ['v*']
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        name: Package and publish
+        runs-on: ubuntu-latest
+        env:
+            OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24.x
+                  cache: yarn
+            - uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '17'
+
+            - name: Check tag matches package version
+              run: |
+                  version="v$(node -p "require('./keith-vscode/package.json').version")"
+                  test "$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != package version $version"; exit 1; }
+
+            - run: yarn --frozen-lockfile
+
+            - name: Restore server runtime
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      keith-vscode/server/kieler-language-server.jar
+                      keith-vscode/server/jetty10
+                  key: server-${{ hashFiles('keith-vscode/server/manifest.json') }}
+            - run: yarn workspace keith-vscode fetch-server
+
+            - run: yarn workspace keith-vscode test
+            - run: yarn workspace keith-vscode test:server
+            - run: yarn tsc --noEmit -p keith-vscode/tsconfig.json
+            - run: yarn tsc --noEmit -p keith-vscode/tsconfig.webview.json
+            - run: yarn lint
+            - run: yarn package
+
+            - name: Extract release notes from CHANGELOG
+              run: |
+                  version="${GITHUB_REF_NAME#v}"
+                  awk -v v="$version" '
+                      $0 ~ "^## \\[" v "\\]" { found = 1; next }
+                      found && /^## \[/ { exit }
+                      found { print }
+                  ' keith-vscode/CHANGELOG.md > release-notes.md
+                  test -s release-notes.md || { echo "No CHANGELOG section for $version"; exit 1; }
+
+            - name: GitHub release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: keith-vscode/sccharts-lab.vsix
+                  body_path: release-notes.md
+
+            - name: Publish to VS Code Marketplace
+              working-directory: keith-vscode
+              env:
+                  VSCE_PAT: ${{ secrets.VSCE_PAT }}
+              run: yarn vsce publish --packagePath sccharts-lab.vsix
+
+            - name: Publish to Open VSX
+              if: env.OVSX_PAT != ''
+              working-directory: keith-vscode
+              run: yarn ovsx publish sccharts-lab.vsix -p "$OVSX_PAT"
