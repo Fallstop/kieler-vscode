@@ -24,6 +24,10 @@ each target method signature and fails the build if a server update changes it:
   to the bare "Instantaneous loop detected!" message.
 - Diagram generation: publish KLighD's existing source associations as trace links.
 - Diagram refresh: skip queued updates whose view context has already been closed.
+- Main-thread hand-off: callers that queue work for KLighD's main thread waited on one shared
+  notify() until the whole queue drained. With overlapping diagram requests a wake-up could go
+  to the wrong caller and the server stalled with every thread waiting. Each caller now waits
+  on its own completion flag and the main loop wakes all waiters.
 - Diagram concurrency: the bundled server held the diagram-state lock while it waited for
   KLighD's main thread, which the queued layout step also locks, so overlapping show or
   model requests deadlocked; it also let a synthesis rebuild the view model while another

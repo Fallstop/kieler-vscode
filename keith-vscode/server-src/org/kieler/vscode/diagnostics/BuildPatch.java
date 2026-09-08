@@ -31,6 +31,8 @@ public final class BuildPatch implements Opcodes {
             patch(jar, args[1], "klighd/lsp/KGraphLayoutEngine", "onlyLayoutOnKGraph", "(Ljava/lang/String;)V", 13);
             patch(jar, args[1], "klighd/lsp/utils/KGraphMappingUtil", "mapLayout", "(Ljava/util/Map;)V", 14);
             patch(jar, args[1], "klighd/lsp/KGraphDiagramServer", "prepareUpdateModel", "(Lorg/eclipse/sprotty/SModelRoot;)V", 15);
+            patch(jar, args[1], "klighd/lsp/launch/AbstractLanguageServer", "addToMainThreadQueue", "(Ljava/util/function/Consumer;)V", 16);
+            patch(jar, args[1], "klighd/lsp/launch/AbstractLanguageServer", "configureAndRun", "(L" + BASE + "klighd/lsp/launch/ILanguageRegistration;L" + BASE + "klighd/lsp/launch/ILsCreator;)V", 17);
             patch(jar, args[1], "klighd/lsp/KGraphDiagramUpdater", "lambda$updateDiagram$5", "(Ljava/lang/String;L" + BASE + "klighd/lsp/KGraphDiagramServer;Lorg/eclipse/emf/ecore/resource/Resource;Lorg/eclipse/xtext/util/CancelIndicator;)Ljava/lang/Void;", 12);
         }
     }
@@ -114,6 +116,15 @@ public final class BuildPatch implements Opcodes {
                             visitInsn(RETURN);
                             visitLabel(present);
                             visitFrame(F_SAME, 0, null, 0, null);
+                        } else if (kind == 16) {
+                            // Main-thread hand-off with per-caller completion flags; see MainThread.
+                            Label original = new Label();
+                            visitFieldInsn(GETSTATIC, target, "mainThreadQueue", "Ljava/util/concurrent/BlockingQueue;");
+                            visitVarInsn(ALOAD, 0);
+                            visitMethodInsn(INVOKESTATIC, "org/kieler/vscode/diagnostics/MainThread", "enqueue", "(Ljava/util/concurrent/BlockingQueue;Ljava/util/function/Consumer;)V", false);
+                            visitInsn(RETURN);
+                            visitLabel(original);
+                            visitFrame(F_SAME, 0, null, 0, null);
                         } else if (kind == 10) {
                             // Replace the body; the original remains as unreachable code behind a frame.
                             Label original = new Label();
@@ -124,6 +135,12 @@ public final class BuildPatch implements Opcodes {
                             visitLabel(original);
                             visitFrame(F_SAME, 0, null, 0, null);
                         }
+                    }
+                    @Override public void visitMethodInsn(int opcode, String owner, String n, String desc, boolean itf) {
+                        // The main loop's single notify() may wake a caller instead of the caller whose task
+                        // finished; callers now wait on their own flags, so every waiter must be woken.
+                        if (kind == 17 && n.equals("notify") && owner.equals("java/lang/Object")) { edits[0]++; n = "notifyAll"; }
+                        super.visitMethodInsn(opcode, owner, n, desc, itf);
                     }
                     @Override public void visitInsn(int opcode) {
                         if (kind == 1 && opcode == RETURN) {
@@ -167,6 +184,7 @@ public final class BuildPatch implements Opcodes {
             }
         }, 0);
         if (matches[0] != 1) throw new IllegalStateException("Unsupported server: " + target + "." + method);
+        if (kind == 17 && edits[0] != 1) throw new IllegalStateException("Unsupported server: " + target + "." + method + " has " + edits[0] + " notify calls");
         if (kind == 12 && edits[0] != 6) throw new IllegalStateException("Unsupported server: " + target + "." + method + " has " + edits[0] + " monitor instructions");
         Path file = Paths.get(out, target + ".class");
         Files.createDirectories(file.getParent());
