@@ -7,7 +7,7 @@ const { GalleryApi } = require('azure-devops-node-api/GalleryApi')
 const { getBasicHandler } = require('azure-devops-node-api/WebApi')
 
 const vsix = path.resolve(process.argv[2] || '')
-const pat = process.env.VSCE_PAT
+const pat = process.env.VSCE_PAT?.trim()
 if (!fs.existsSync(vsix) || !pat) {
     console.error('Usage: VSCE_PAT=<token> node publish-marketplace.cjs <file.vsix>')
     process.exit(2)
@@ -33,7 +33,8 @@ async function main() {
         if (existing) await api.updateExtension(undefined, fs.createReadStream(vsix), publisher, name)
         else await api.createExtension(undefined, fs.createReadStream(vsix))
     } catch (error) {
-        if (error.statusCode === 409) {
+        if (error.statusCode === 409 && (await api.getExtension(null, publisher, name, undefined, 1))
+            ?.versions?.some((entry) => entry.version === version)) {
             console.log(`${id} v${version} already exists.`)
             return
         }
@@ -44,6 +45,13 @@ async function main() {
 }
 
 main().catch((error) => {
-    console.error(error.message || error)
+    if (error.statusCode === 401 || error.statusCode === 403) {
+        console.error(`Marketplace authentication failed (HTTP ${error.statusCode}) for publisher ${publisher}. ` +
+            'Update the repository VSCE_PAT secret with an Azure DevOps PAT for All accessible organizations, ' +
+            'with Marketplace > Manage scope, from an account allowed to publish for this publisher. ' +
+            'Then rerun the failed release job; the GitHub VSIX is already available if its release step succeeded.')
+    } else {
+        console.error(error.message || error)
+    }
     process.exit(1)
 })

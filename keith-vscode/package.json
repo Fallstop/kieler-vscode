@@ -2,7 +2,7 @@
   "name": "sccharts-lab",
   "displayName": "SCCharts Lab",
   "description": "Edit, visualise, simulate tick by tick, and debug SCCharts models in VS Code. Independent fork of the KIELER VS Code extension (keith-vscode).",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "qinnovate",
   "author": "Jasper Miller-Waugh",
   "contributors": [
@@ -423,6 +423,24 @@
         "title": "Open Diagram Preview",
         "icon": "$(open-preview)",
         "category": "KIELER Diagram"
+      },
+      {
+        "command": "keith-vscode.generate-code",
+        "title": "Generate Code...",
+        "category": "SCCharts",
+        "icon": "$(code)"
+      },
+      {
+        "command": "keith-vscode.save-generated-code",
+        "title": "Save Generated File As...",
+        "category": "SCCharts",
+        "icon": "$(save)"
+      },
+      {
+        "command": "keith-vscode.save-all-generated-code",
+        "title": "Save All Generated Files...",
+        "category": "SCCharts",
+        "icon": "$(save-all)"
       }
     ],
     "menus": {
@@ -569,6 +587,18 @@
         {
           "when": "keith-diagram-focused",
           "command": "keith-vscode.diagram.noSync"
+        },
+        {
+          "command": "keith-vscode.generate-code",
+          "when": "resourceLangId == sctx && resourceScheme == file"
+        },
+        {
+          "command": "keith-vscode.save-generated-code",
+          "when": "resourceScheme == sccharts-generated"
+        },
+        {
+          "command": "keith-vscode.save-all-generated-code",
+          "when": "resourceScheme == sccharts-generated"
         }
       ],
       "editor/title": [
@@ -636,6 +666,21 @@
           "when": "keith-diagram-focused",
           "command": "keith-vscode.diagram.export",
           "group": "2_diagram-controls@2"
+        },
+        {
+          "command": "keith-vscode.generate-code",
+          "when": "resourceLangId == sctx && resourceScheme == file",
+          "group": "2_codegen@1"
+        },
+        {
+          "command": "keith-vscode.save-generated-code",
+          "when": "resourceScheme == sccharts-generated",
+          "group": "navigation@1"
+        },
+        {
+          "command": "keith-vscode.save-all-generated-code",
+          "when": "resourceScheme == sccharts-generated",
+          "group": "navigation@2"
         }
       ],
       "editor/context": [
@@ -655,6 +700,11 @@
           "when": "resourceLangId in keith-vscode.languages",
           "command": "keith-vscode.diagram.open",
           "group": "navigation"
+        },
+        {
+          "command": "keith-vscode.generate-code",
+          "when": "resourceExtname == .sctx && resourceScheme == file",
+          "group": "2_codegen"
         }
       ],
       "view/title": [
@@ -857,7 +907,7 @@
     "lint": "eslint .",
     "lint-fix": "eslint --fix .",
     "test": "node --test test/*.test.cjs",
-    "test:server": "npm run build:server && node test/server-smoke.cjs && node test/server-diagnostics.cjs",
+    "test:server": "npm run build:server && node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs",
     "build": "node scripts/build-server-patch.cjs && webpack --mode production",
     "watch": "webpack --watch",
     "package": "vsce package --yarn -o sccharts-lab.vsix",

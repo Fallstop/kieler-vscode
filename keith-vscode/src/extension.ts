@@ -26,6 +26,7 @@ import { DiagramController } from './diagram/diagram-controller'
 import { REQUEST_CS } from './kico/commands'
 import { CompilationDataProvider } from './kico/compilation-data-provider'
 import { DiagnosticBridge } from './kico/diagnostic-bridge'
+import { registerCodeGeneration } from './kico/code-generation'
 import { ModelCheckerDataProvider } from './model-checker/model-checker-data-provider'
 import { registerStpaCommands } from './pasta/stpa-interaction'
 import { handlePerformAction, PerformActionAction, performActionKind } from './perform-action-handler'
@@ -168,6 +169,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(settingsService)
 
     const compilationDataProvider = new CompilationDataProvider(lsClient, context, settingsService)
+    registerCodeGeneration(context, compilationDataProvider)
     compilationDataProvider.awaitDiagram = () => diagrams.nextModel()
     context.subscriptions.push(
         new DiagnosticBridge(compilationDataProvider.diagnostics, diagrams, (uri, index) =>

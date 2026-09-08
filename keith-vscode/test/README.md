@@ -11,6 +11,12 @@ and recovery after failures. This check builds the diagnostic patch and requires
 JDK 11 or newer, `gcc`, and the bundled server JAR and Jetty libraries.
 Set `KIELER_SERVER_DIR` to use server libraries from another checkout for the smoke test.
 
+The server suite also generates C and Java through the real protocol, checks that source
+files stay in memory, compiles exported fixtures with GCC and `javac`, and exercises invalid
+input, incompatible host code, scheduler failure and recovery. Run `node test/server-codegen.cjs`
+after `npm run build:server` for just these checks. Client tests cover virtual preview lifetime,
+Save As, grouped export, overwrite protection, save errors, cancellation and stale builds.
+
 Client tests cover diagnostic invalidation during edits, cancellation, restart,
 file switching, source mapping, diagram trace selection, and the error panel.
 

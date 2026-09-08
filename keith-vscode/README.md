@@ -45,6 +45,32 @@ fixed-size array assignments offer a **Copy array elements individually** quick 
 in the editor. Timing changes needed to resolve scheduler conflicts remain explicit
 modeling decisions.
 
+### Generate C and Java
+
+Open an `.sctx` model and run **SCCharts: Generate Code...** from the Command Palette,
+the editor's **More Actions** menu, or the file's Explorer context menu. Choose **C**,
+**Java**, or **C and Java**. Unsaved edits to the source model are saved before compilation.
+
+Generated `.c`/`.h` and `.java` files open as read-only virtual documents. Generated files
+are not written to your project until you save them. Use VS Code's **Save As...** or the
+editor's **Save Generated File As...** action for one file. **Save All Generated Files...**
+saves a target's complete set (including C headers) to a chosen folder and asks before
+replacing existing files. Each generation opens separate previews; closing them discards
+the unsaved output. Save files you want to keep before closing the window.
+
+Generation errors appear in Problems and the compiler panel. Models with C-only host
+code cannot generate Java without matching Java implementations, and vice versa.
+Failed, cancelled, or stale results never open as generated files. When generating both
+targets, a successful target remains available if the other fails.
+
+This command generates source using KIELER's netlist compiler. It does not invoke GCC
+or `javac`; compiling and linking the saved output, including host libraries, belongs to
+your application's build. The generated model exposes `reset` and `tick`; your application
+initializes it, supplies inputs, calls `tick`, and reads outputs each reaction.
+
+The bundled SCCharts Lab server is required for virtual code generation. An older or
+external server that does not return generated files produces an explicit error.
+
 ## Requirements
 
 SCCharts Lab is incompatible with the original **KIELER VS Code** extension

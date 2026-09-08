@@ -22,6 +22,9 @@ each target method signature and fails the build if a server update changes it:
   exit because other model variables or host C can retain their pointers across ticks.
 - Loop analyzer completion: attach the critical nodes' source locations and an explanation
   to the bare "Instantaneous loop detected!" message.
+- Compiler completion: include in-memory C/Java source files in the final result. Generation
+  validates the saved source and host-language implementations before exposing files. Failures
+  become structured diagnostics on the existing code-generation stage; no files are written.
 - Diagram generation: publish KLighD's existing source associations as trace links.
 - Diagram refresh: skip queued updates whose view context has already been closed.
 - Main-thread hand-off: callers that queue work for KLighD's main thread waited on one shared
@@ -48,6 +51,12 @@ origin. In that case the UI retains a compiler-stage/generated-file diagnostic.
 Generated C assignments retain their original model locations. Embedded C is mapped
 through decoded string offsets; a unique simple array copy can also be matched to
 source. Unmapped expressions remain linked to generated C.
+
+`CompilationResults` also retains its existing constructor and `files` stage list, adding
+optional `generatedFiles` and `generationError` fields. The compiler's existing final
+`CodeContainer` supplies all filenames and contents. Intermediate, failed, and deployment
+results do not expose source files. The client discards cancelled and stale results and
+uses immutable virtual documents with explicit Save As / Save All actions.
 
 Run `npm run test:server` for real-server coverage, including the full broken demo,
 the resulting array error, embedded C errors, and recovery to a working simulation.

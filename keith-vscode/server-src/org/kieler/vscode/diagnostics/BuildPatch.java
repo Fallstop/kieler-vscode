@@ -33,6 +33,7 @@ public final class BuildPatch implements Opcodes {
             patch(jar, args[1], "klighd/lsp/KGraphDiagramServer", "prepareUpdateModel", "(Lorg/eclipse/sprotty/SModelRoot;)V", 15);
             patch(jar, args[1], "klighd/lsp/launch/AbstractLanguageServer", "addToMainThreadQueue", "(Ljava/util/function/Consumer;)V", 16);
             patch(jar, args[1], "klighd/lsp/launch/AbstractLanguageServer", "configureAndRun", "(L" + BASE + "klighd/lsp/launch/ILanguageRegistration;L" + BASE + "klighd/lsp/launch/ILsCreator;)V", 17);
+            patch(jar, args[1], "language/server/kicool/KiCoolLanguageServerExtension", "lambda$update$5", "(Ljava/lang/String;ZIILjava/lang/Class;)V", 18);
             patch(jar, args[1], "klighd/lsp/KGraphDiagramUpdater", "lambda$updateDiagram$5", "(Ljava/lang/String;L" + BASE + "klighd/lsp/KGraphDiagramServer;Lorg/eclipse/emf/ecore/resource/Resource;Lorg/eclipse/xtext/util/CancelIndicator;)Ljava/lang/Void;", 12);
         }
     }
@@ -137,6 +138,17 @@ public final class BuildPatch implements Opcodes {
                         }
                     }
                     @Override public void visitMethodInsn(int opcode, String owner, String n, String desc, boolean itf) {
+                        if (kind == 18 && owner.equals(BASE + "language/server/kicool/data/CompilationResults") && n.equals("<init>")) {
+                            edits[0]++;
+                            super.visitVarInsn(ALOAD, 0);
+                            super.visitFieldInsn(GETFIELD, target, "objectMap", "Ljava/util/Map;");
+                            super.visitVarInsn(ALOAD, 1);
+                            super.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", true);
+                            super.visitTypeInsn(CHECKCAST, "java/util/List");
+                            super.visitVarInsn(ILOAD, 2);
+                            super.visitVarInsn(ALOAD, 1);
+                            desc = "(Ljava/util/List;Ljava/util/List;ZLjava/lang/String;)V";
+                        }
                         // The main loop's single notify() may wake a caller instead of the caller whose task
                         // finished; callers now wait on their own flags, so every waiter must be woken.
                         if (kind == 17 && n.equals("notify") && owner.equals("java/lang/Object")) { edits[0]++; n = "notifyAll"; }
@@ -185,6 +197,7 @@ public final class BuildPatch implements Opcodes {
         }, 0);
         if (matches[0] != 1) throw new IllegalStateException("Unsupported server: " + target + "." + method);
         if (kind == 17 && edits[0] != 1) throw new IllegalStateException("Unsupported server: " + target + "." + method + " has " + edits[0] + " notify calls");
+        if (kind == 18 && edits[0] != 1) throw new IllegalStateException("Unsupported server: " + target + "." + method + " has " + edits[0] + " result constructors");
         if (kind == 12 && edits[0] != 6) throw new IllegalStateException("Unsupported server: " + target + "." + method + " has " + edits[0] + " monitor instructions");
         Path file = Paths.get(out, target + ".class");
         Files.createDirectories(file.getParent());

@@ -20,6 +20,7 @@ import { LanguageClient } from 'vscode-languageclient/node'
 import { Utils } from 'vscode-uri'
 import { CompilerDiagnostics } from './compiler-diagnostics'
 import { CompilerIssue } from './diagnostic-protocol'
+import type { GeneratedFile } from './generated-code-documents'
 import { Settings } from '../constants'
 import { SettingsService } from '../settings'
 import {
@@ -77,6 +78,8 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
     endTime = 0
 
     compiling = false
+
+    generatingCode = false
 
     lastInvokedCompilation = ''
 
@@ -476,6 +479,8 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
     onDidChangeTextDocument(event: vscode.TextDocumentChangeEvent): void {
         // don't autocompile, if autocompile is off, document is not saved or it is not the last compiled file
         if (
+            this.generatingCode ||
+            this.compiling ||
             !this.settings.get('autocompile.enabled') ||
             event.document.isDirty ||
             event.document.uri.toString() !== this.lastCompiledUri
@@ -565,7 +570,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         snapshot: boolean,
         uri = this.sourceModelPath
     ): Promise<void> {
-        if (!this.settings.get('autocompile.enabled')) {
+        if (!this.generatingCode && !this.settings.get('autocompile.enabled')) {
             // TODO too much information? Test this for visual clutter
             vscode.window.showInformationMessage(`Compiling ${uri} with ${command}`)
         }
@@ -585,12 +590,27 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
      * Handles the visualization of new snapshot descriptions send by the LS.
      */
     async handleNewSnapshotDescriptions(
-        results: CompilationResults,
+        results: CompilationResults | null,
         uri: string,
         finished: boolean,
         currentIndex: number,
         maxIndex: number
     ): Promise<void> {
+        results ??= {
+            files: [
+                [
+                    new SnapshotDescription(
+                        'Source model',
+                        '',
+                        vscode.TreeItemCollapsibleState.None,
+                        'Source model',
+                        0,
+                        0,
+                        ['The model could not be loaded. Check the source errors in Problems.']
+                    ),
+                ],
+            ],
+        }
         // Show next/previous command and keybinding if not already added
         if (!(await vscode.commands.getCommands()).includes(SHOW_NEXT.command)) {
             this.registerShowNext()
@@ -649,7 +669,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                     ? `$(check) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
                     : `$(times) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
             this.compilation.tooltip = currentIndex >= maxIndex ? 'Compilation finished' : 'Compilation stopped'
-            if (errorOccurred && report?.status !== 'stale') {
+            if (errorOccurred && report?.status !== 'stale' && !this.generatingCode) {
                 const first = report?.issues.find((issue) => issue.severity === 'error')
                 vscode.window
                     .showErrorMessage(
@@ -681,12 +701,10 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
      * Notifies the LS to cancel the compilation.
      */
     public async requestCancelCompilation(): Promise<void> {
-        this.lsClient.start().then(() => {
-            this.cancellingCompilation = true
-            this.lsClient.sendNotification(CANCEL_COMPILATION)
-            this.compilationFinishedEmitter.fire(false)
-            // TODO somehow update view
-        })
+        await this.lsClient.start()
+        this.cancellingCompilation = true
+        await this.lsClient.sendNotification(CANCEL_COMPILATION)
+        this.compilationFinishedEmitter.fire(false)
     }
 
     /**
@@ -700,53 +718,6 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
             this.diagnostics?.cancel(this.lastCompiledUri)
         }
     }
-
-    // /**
-    //  * Sends request to LS to get text to open new code editor with
-    //  */
-    // async displayInputModel(action: PerformActionAction): Promise<void> {
-    //     this.lsClient.onReady().then(async () => {
-    //         const codeContainer: Code = await this.lsClient.sendRequest('keith/kicool/get-code-of-model', [action.kGraphElementId, diagramType + '_sprotty'])
-    //         const uri = new URI(this.workspace.rootUri + '/KIELER_DEV/' + codeContainer.fileName)
-    //         this.fileSystem.delete(uri.toString())
-    //         this.fileSystem.createFolder(this.workspace.rootUri + '/KIELER_DEV')
-    //         this.getDirectory(uri).then(parent => {
-    //             if (parent) {
-    //                 const parentUri = new URI(parent.uri);
-    //                 const vacantChildUri = FileSystemUtils.generateUniqueResourceURI(parentUri, parent, uri.path.name, uri.path.ext);
-
-    //                 if (vacantChildUri.toString()) {
-    //                     const fileUri = parentUri.resolve(vacantChildUri.displayName);
-    //                     this.fileSystem.createFile(fileUri.toString()).then(() => {
-    //                         open(this.openerService, fileUri, {
-    //                             mode: 'reveal',
-    //                             widgetOptions: {
-    //                                 ref: this.editorManager.currentEditor
-    //                             }
-    //                         }).then(() => {
-    //                             this.editorManager.getByUri(fileUri).then(editor => {
-    //                                 if (editor) {
-    //                                     editor.editor.replaceText({
-    //                                         source: fileUri.toString(),
-    //                                         replaceOperations: [{range: {
-    //                                             start: { line: 0, character: 0 },
-    //                                             end: {
-    //                                                 line: editor.editor.document.lineCount,
-    //                                                 character: editor.editor.document.getLineContent(editor.editor.document.lineCount).length
-    //                                             }
-    //                                         }, text: codeContainer.code}]
-    //                                     })
-    //                                     editor.editor.document.save()
-    //                                 }
-    //                             })
-
-    //                         })
-    //                     })
-    //                 }
-    //             }
-    //         })
-    //     })
-    // }
 
     // TODO
     registerShowNext(): void {
@@ -832,7 +803,6 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
             element.label = element.name
             return element
         }
-        // resultMap holds a CodeContainer with everything
         throw new Error('Method not implemented.')
     }
 
@@ -991,11 +961,8 @@ export class CompilationSystemsMessage {
  */
 export interface CompilationResults {
     files: SnapshotDescription[][]
-}
-
-export interface Code {
-    fileName: string
-    code: string
+    generatedFiles?: GeneratedFile[]
+    generationError?: string
 }
 
 // /**

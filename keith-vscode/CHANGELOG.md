@@ -6,6 +6,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-08
+
+- Generate C, Java, or both from SCCharts into read-only virtual code tabs. Save individual
+  files with Save As or export a target's complete set to a folder. Generation failures and
+  incompatible host-language extensions report source diagnostics; cancelled and stale
+  builds cannot replace previews or write project files.
+- Marketplace publishing reports actionable authentication errors and only treats a
+  conflicting upload as successful after confirming that the requested version exists.
+
 ## [0.5.1] - 2026-09-08
 
 - Renamed to SCCharts Lab with a new icon and published under the `qinnovate` publisher as an
