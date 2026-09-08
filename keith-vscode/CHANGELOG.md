@@ -23,7 +23,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   highlighting a conflict, no longer deadlock the language server or fail with
   `KNode.getParent()` null-pointer errors. The bundled server waited for KLighD's main
   thread while holding the lock that thread needed, and let a synthesis rebuild a diagram
-  another request was still traversing. Show requests are also sequenced on the client.
+  another request was still traversing. Callers that hand work to KLighD's main thread now
+  wait on their own completion flag, so a wake-up can no longer land on the wrong caller and
+  stall every diagram request. Show requests are also sequenced on the client.
 
 ## [0.5.0] - 2026-09-08
 
