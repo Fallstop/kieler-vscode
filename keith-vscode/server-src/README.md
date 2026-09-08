@@ -7,7 +7,7 @@ Jetty compatibility libraries and the unchanged language server. End users need
 only Java; building requires a JDK. A client-only checkout can still build without
 the untracked server JAR and uses legacy-message fallback diagnostics.
 
-`BuildPatch` uses the ASM already bundled in KIELER to add nine hooks. It checks
+`BuildPatch` uses the ASM already bundled in KIELER to add the hooks below. It checks
 each target method signature and fails the build if a server update changes it:
 
 - Begin compilation: capture original Xtext ranges and stop on compiler errors.
@@ -20,8 +20,16 @@ each target method signature and fails the build if a server update changes it:
 - C simulation template: retain incoming strings beyond their JSON message's lifetime.
   Equal strings are reused per model slot; distinct values stay alive until simulation
   exit because other model variables or host C can retain their pointers across ticks.
+- Loop analyzer completion: attach the critical nodes' source locations and an explanation
+  to the bare "Instantaneous loop detected!" message.
 - Diagram generation: publish KLighD's existing source associations as trace links.
 - Diagram refresh: skip queued updates whose view context has already been closed.
+- Diagram concurrency: the bundled server held the diagram-state lock while it waited for
+  KLighD's main thread, which the queued layout step also locks, so overlapping show or
+  model requests deadlocked; it also let a synthesis rebuild the view model while another
+  request traversed it, which failed with detached nodes. The patch drops that lock around
+  `prepareModel`, serializes `prepareModel` and `createModel` with one model lock instead,
+  reads a node's parent once, and lets a superseded request skip its layout step.
 
 `SnapshotDescription` retains the existing DTO methods and raw messages, and adds
 structured diagnostics. This is an additive protocol change. The patch does not

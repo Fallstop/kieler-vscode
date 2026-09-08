@@ -58,6 +58,10 @@ async function main() {
             assert.equal(demo.slice(location.offset, location.offset + location.length).trim().replace(/\s+/g, ' '), location.label)
             assert.ok(location.traceUris.length > 0)
         }
+        assert.ok(!broken.issues.some(issue => issue.code === 'compiler' && /Can't schedule|NOT asc-schedulable/.test(issue.message)), 'Per-edge scheduler messages stay in Technical details only')
+        const loops = broken.issues.filter(issue => issue.code === 'instantaneous-loop')
+        assert.ok(loops.length > 0 && loops.every(loop => loop.severity === 'warning' && loop.locations.length > 0), JSON.stringify(broken.issues))
+        assert.ok(loops.some(loop => loop.locations.some(location => cycles[0].locations.some(other => other.offset === location.offset))), 'The analyzer also warns about the cycle the scheduler rejects')
         assert.ok(!broken.stages.some(stage => stage.name === 'GCC Compiler'), 'Stop after scheduler errors')
         assert.ok(!fs.existsSync(path.join(broken.dir, 'kieler-gen/bin/simulation.exe')))
         console.log('Scheduler: one two-edge cycle, exact source ranges, diagram traces, no executable.')
@@ -80,6 +84,29 @@ async function main() {
         }
         assert.ok(!stderr.includes('NullPointerException'), stderr)
         console.log('Diagram recovery: scheduler/source switching completes without stale-context failures.')
+
+        // The bundled server deadlocked on overlapping show requests (main thread waiting for the diagram
+        // state lock held by a request waiting for the main thread) and raced synthesis against traversal.
+        for (let round = 0; round < 3; round++) {
+            const settled = waitFor('diagram/accept', message => !!message.action?.newRoot)
+            const overlapping = [schedulerIndex, -1, 0, -1].map(index => connection.sendRequest('keith/kicool/show', { uri: broken.uri, clientId: 'keith-diagram_sprotty', index }))
+            overlapping.push(connection.sendNotification('diagram/accept', { clientId: 'keith-diagram_sprotty', action: { kind: 'requestModel', requestId: `overlap-${round}`, options: { sourceUri: broken.uri, diagramType: 'keith-diagram', needsClientLayout: false, needsServerLayout: true } } }))
+            const answers = await Promise.race([Promise.all(overlapping), new Promise((_, reject) => setTimeout(() => reject(new Error('Overlapping show requests hung')), 30000))])
+            assert.deepEqual(answers.slice(0, 4), ['OK', 'OK', 'OK', 'OK'])
+            await settled
+        }
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        assert.ok(!/NullPointerException|ConcurrentModificationException|Java-level deadlock/.test(stderr), stderr)
+        console.log('Diagram concurrency: overlapping show and model requests neither hang nor fail.')
+
+        const timed = await compile('timed', fs.readFileSync(path.join(__dirname, 'fixtures/timed-loop.sctx'), 'utf8'))
+        assert.deepEqual(timed.errors, [], 'A delayed clock loop still compiles')
+        const advisory = timed.issues.filter(issue => issue.code === 'instantaneous-loop')
+        assert.ok(advisory.length >= 1, JSON.stringify(timed.issues))
+        assert.ok(advisory[0].locations.some(location => location.label === 'x = 0'), JSON.stringify(advisory[0].locations))
+        assert.ok(advisory[0].hint.includes('delayed'))
+        assert.ok(!timed.issues.some(issue => issue.code === 'compiler' && issue.message.includes('Instantaneous loop')), 'The bare analyzer message is replaced, not duplicated')
+        console.log('Loop analyzer: timed models get a located, explained warning instead of a bare message.')
 
         const array = await compile('array', demo.replace('timeout_update = false;', ''))
         const cIssue = array.issues.find(issue => issue.code === 'c-compiler' && /array type.*not assignable|assignment to expression with array type/.test(issue.message))

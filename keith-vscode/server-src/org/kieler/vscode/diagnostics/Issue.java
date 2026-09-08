@@ -4,6 +4,9 @@ import java.util.*;
 
 /** JSON payload shared with the extension. Offsets are UTF-16, like Xtext and VS Code. */
 public final class Issue {
+    /** Payload marking a raw compiler message that a structured issue already explains. */
+    public static final Object SUPPRESSED = new Object();
+
     public String code;
     public String message;
     public String severity = "error";

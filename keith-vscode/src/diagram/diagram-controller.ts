@@ -162,6 +162,21 @@ export class DiagramController {
         return this.manager?.currentUri
     }
 
+    /** Resolves once the server delivers the next diagram model, or after the timeout when none arrives. */
+    nextModel(timeoutMs = 15000): Promise<void> {
+        const { manager } = this
+        if (!manager || !manager.isOpen) return Promise.resolve()
+        return new Promise((resolve) => {
+            const subscription = manager.onDidReceiveModel(() => finish())
+            const timer = setTimeout(finish, timeoutMs)
+            function finish() {
+                clearTimeout(timer)
+                subscription.dispose()
+                resolve()
+            }
+        })
+    }
+
     /** Send a notification to every open diagram webview; a no-op while none is open. */
     sendToDiagram<P>(type: NotificationType<P>, payload: P): void {
         this.manager?.messenger.sendNotification(type, { type: 'webview', webviewType: diagramType }, payload)

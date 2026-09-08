@@ -6,6 +6,19 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-08
+
+- The compiler's "Instantaneous loop detected!" warning now names the operations on the
+  loop, links to them, explains when it is advisory (a clock or variable reset on every
+  transition of a delayed cycle) and how to break a real loop. When the scheduler rejects
+  the same loop, its cycle error replaces the warning. The scheduler's per-edge messages
+  stay in Technical details instead of appearing as separate problems.
+- Overlapping diagram requests, such as showing a compiler stage right after a build or
+  highlighting a conflict, no longer deadlock the language server or fail with
+  `KNode.getParent()` null-pointer errors. The bundled server waited for KLighD's main
+  thread while holding the lock that thread needed, and let a synthesis rebuild a diagram
+  another request was still traversing. Show requests are also sequenced on the client.
+
 ## [0.5.0] - 2026-09-08
 
 - Compilation failures appear in the diagram preview and VS Code Problems, with

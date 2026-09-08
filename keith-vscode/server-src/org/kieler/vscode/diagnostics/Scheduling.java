@@ -49,6 +49,12 @@ public final class Scheduling {
             issue.details = component.size() + " generated operations are in this dependency cycle. Other unscheduled operations may be consequences of this conflict.";
             processor.getEnvironment().getErrors().add(null, issue.message, graph, issue);
         }
+        if (analysis.components.isEmpty()) return;
+        // The scheduler's per-edge messages repeat what the cycle witness explains.
+        for (de.cau.cs.kieler.kicool.environments.MessageObjectLink message : processor.getEnvironment().getErrors().getAllRootMessages()) {
+            String text = String.valueOf(message.getMessage());
+            if (message.getPayload() == null && (text.startsWith("Can't schedule") || text.contains("NOT asc-schedulable"))) message.setPayload(Issue.SUPPRESSED);
+        }
     }
 
     private static String name(Node node) {

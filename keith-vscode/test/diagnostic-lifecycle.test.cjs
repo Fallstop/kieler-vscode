@@ -113,3 +113,38 @@ test('mapped array errors keep generated related information and a version-bound
     changes.fire({ document: doc })
     assert.deepEqual(actions.provideCodeActions(doc, problem.range), [])
 })
+
+test('loop warnings explained by a scheduler cycle are dropped; standalone ones keep their source', async () => {
+    const { diagnostics, document } = setup()
+    const doc = document('file:///demo.sctx', 'scchart Demo { int x\n }')
+    const uri = doc.uri.toString()
+    const at = (offset, label) => ({ uri, offset, length: 3, label })
+    const loop = (locations) => ({ code: 'instantaneous-loop', message: 'Instantaneous loop detected!', severity: 'warning', hint: 'Make one transition delayed.', locations, cycle: [] })
+    const cycle = { code: 'scheduling-cycle', message: 'Circular dependency prevents scheduling this tick.', severity: 'error', locations: [at(15, 'x = 1'), at(19, 'x = 2')], cycle: [] }
+    await diagnostics.begin(uri)
+    let report = diagnostics.finish(uri, [[
+        { name: 'Dependency', index: 0, warnings: ['Instantaneous loop detected!'], diagnostics: [loop([at(15, 'x = 1'), at(19, 'x = 2')])] },
+        { name: 'Basic Blocks', index: 1, warnings: ['Instantaneous loop detected!'], diagnostics: [loop([at(15, 'x = 1'), at(19, 'x = 2')])] },
+        { name: 'Scheduler', index: 2, errors: ['The SCG is NOT asc-schedulable!'], diagnostics: [cycle] },
+    ]], false)
+    assert.deepEqual(report.issues.map(issue => issue.code), ['scheduling-cycle'])
+    assert.equal(report.status, 'failed')
+
+    await diagnostics.begin(uri)
+    report = diagnostics.finish(uri, [[
+        { name: 'Dependency', index: 0, warnings: ['Instantaneous loop detected!'], diagnostics: [loop([at(15, 'x = 0')])] },
+        { name: 'Basic Blocks', index: 1, warnings: ['Instantaneous loop detected!'], diagnostics: [loop([at(15, 'x = 0')])] },
+    ]], false)
+    assert.equal(report.status, 'succeeded')
+    assert.equal(report.issues.length, 1, 'Both analyzer runs describe the same loop')
+    assert.equal(report.issues[0].message, 'Potential instantaneous loop through x.')
+    assert.equal(report.issues[0].hint, 'Make one transition delayed.')
+    assert.equal(report.issues[0].severity, 'warning')
+
+    await diagnostics.begin(uri)
+    report = diagnostics.finish(uri, [[
+        { name: 'Dependency', index: 0, warnings: ['Instantaneous loop detected!'], diagnostics: [loop([])] },
+        { name: 'Scheduler', index: 1, errors: ['The SCG is NOT asc-schedulable!'], diagnostics: [cycle] },
+    ]], false)
+    assert.deepEqual(report.issues.map(issue => issue.code), ['scheduling-cycle'], 'An unlocated loop warning adds nothing to a cycle error')
+})

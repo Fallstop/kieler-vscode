@@ -10,6 +10,21 @@ interface Stage {
     diagnostics?: CompilerIssue[]
 }
 
+/** A scheduler cycle error already explains the loop the analyzer warned about earlier in the pipeline. */
+function withoutExplainedLoops(issues: BuildIssue[]): BuildIssue[] {
+    const explained = new Set(
+        issues
+            .filter((issue) => issue.code === 'scheduling-cycle')
+            .flatMap((issue) => issue.locations.map((l) => `${l.uri}:${l.offset}`))
+    )
+    if (!explained.size) return issues
+    return issues.filter(
+        (issue) =>
+            issue.code !== 'instantaneous-loop' ||
+            (issue.locations.length > 0 && !issue.locations.some((l) => explained.has(`${l.uri}:${l.offset}`)))
+    )
+}
+
 export class CompilerDiagnostics implements vscode.Disposable {
     private readonly collection = vscode.languages.createDiagnosticCollection('kieler-compiler')
 
@@ -128,15 +143,17 @@ export class CompilerDiagnostics implements vscode.Disposable {
                         stage: stage.name,
                         snapshotIndex: flatIndex,
                     }
-                    if (issue.code === 'scheduling-cycle') {
-                        const symbols = new Set(
-                            issue.locations.flatMap((l) => l.label.match(/\b[A-Za-z_]\w*(?=\s*=(?!=))/g) ?? [])
-                        )
-                        if (symbols.size)
-                            issue.message = `Circular dependency involving ${[...symbols].join(
-                                ', '
-                            )} prevents scheduling this tick.`
-                    }
+                    const symbols = new Set(
+                        issue.locations.flatMap((l) => l.label.match(/\b[A-Za-z_]\w*(?=\s*=(?!=))/g) ?? [])
+                    )
+                    if (issue.code === 'scheduling-cycle' && symbols.size)
+                        issue.message = `Circular dependency involving ${[...symbols].join(
+                            ', '
+                        )} prevents scheduling this tick.`
+                    if (issue.code === 'instantaneous-loop')
+                        issue.message = symbols.size
+                            ? `Potential instantaneous loop through ${[...symbols].join(', ')}.`
+                            : 'Potential instantaneous loop.'
                     if (
                         !issues.some(
                             (other) =>
@@ -149,7 +166,7 @@ export class CompilerDiagnostics implements vscode.Disposable {
                 flatIndex++
             })
         )
-        report.issues = issues
+        report.issues = withoutExplainedLoops(issues)
         report.status = cancelled
             ? 'cancelled'
             : issues.some((issue) => issue.severity === 'error')
@@ -226,7 +243,10 @@ export class CompilerDiagnostics implements vscode.Disposable {
                           uri: report.uri,
                           offset: 0,
                           length: Math.min(1, source.length),
-                          label: 'Build failed in this stage',
+                          label:
+                              issue.severity === 'error'
+                                  ? 'Build failed in this stage'
+                                  : 'Reported by this compiler stage',
                       },
                   ]
             // Prefer source locations; generated C remains a related link when it maps back to SCTX.

@@ -57,6 +57,11 @@ export const diagramType = 'keith-diagram'
 export class CompilationDataProvider implements vscode.TreeDataProvider<SnapshotDescription> {
     readonly diagnostics = new CompilerDiagnostics()
 
+    /** Set by the extension: resolves once the diagram view received the model a show request produced. */
+    awaitDiagram: (() => Promise<void>) | undefined
+
+    private showQueue: Promise<void> = Promise.resolve()
+
     editor: vscode.TextEditor | undefined = undefined
 
     requestedSystems = false
@@ -505,13 +510,21 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
      * @param id id of snapshot e.g. Signal
      * @param index index of snapshot
      */
-    public async show(uri: string, index: number): Promise<void> {
-        await this.lsClient.start()
-        const result = await this.lsClient.sendRequest(SHOW, { uri, clientId: `${diagramType}_sprotty`, index })
-        if (result === 'ERR') throw new Error('The compiler diagram could not be opened.')
-        this.indexMap.set(uri, index)
-        // Original model must not fire this emitter.
-        if (index !== -1) this.showedNewSnapshotEmitter.fire('Success')
+    public show(uri: string, index: number): Promise<void> {
+        const run = async () => {
+            await this.lsClient.start()
+            const delivered = this.awaitDiagram?.()
+            const result = await this.lsClient.sendRequest(SHOW, { uri, clientId: `${diagramType}_sprotty`, index })
+            if (result === 'ERR') throw new Error('The compiler diagram could not be opened.')
+            this.indexMap.set(uri, index)
+            // Original model must not fire this emitter.
+            if (index !== -1) this.showedNewSnapshotEmitter.fire('Success')
+            await delivered
+        }
+        // The server keeps generating after it acknowledges a show; overlapping requests would race.
+        const next = this.showQueue.then(run, run)
+        this.showQueue = next.catch(() => undefined)
+        return next
     }
 
     /**

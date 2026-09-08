@@ -1,0 +1,12 @@
+scchart TrafficLight {
+  output int light = 0
+  region {
+    clock x = 0
+    initial state Red
+    if x > 10 do x = 0; light = 1 go to Green
+    state Green
+    if x > 5 do x = 0; light = 2 go to Yellow
+    state Yellow
+    if x > 3 do x = 0; light = 0 go to Red
+  }
+}

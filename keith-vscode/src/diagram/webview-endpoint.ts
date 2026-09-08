@@ -25,6 +25,11 @@ import { LanguageClient } from 'vscode-languageclient/node'
 
 type ActionHandler = (action: Action) => unknown
 
+export interface KlighDWebviewEndpointOptions extends LspWebviewEndpointOptions {
+    /** Called whenever the server delivers a new diagram model to this webview. */
+    onModelReceived?: () => void
+}
+
 /**
  * Mostly the LspWebviewEndpoint implementation, with the change that we can also intercept
  * LspRequests that will request a diagram/accept action.
@@ -34,9 +39,18 @@ export class KlighDWebviewEndpoint extends WebviewEndpoint {
 
     protected readonly klighdActionHandlers: Map<string, ActionHandler[]> = new Map()
 
-    constructor(options: LspWebviewEndpointOptions) {
+    private readonly onModelReceived?: () => void
+
+    constructor(options: KlighDWebviewEndpointOptions) {
         super(options)
         this.languageClient = options.languageClient
+        this.onModelReceived = options.onModelReceived
+    }
+
+    override async sendAction(action: Action | ActionMessage): Promise<void> {
+        const payload = isActionMessage(action) ? action.action : action
+        if (payload && 'newRoot' in payload) this.onModelReceived?.()
+        await super.sendAction(action as Action)
     }
 
     /**

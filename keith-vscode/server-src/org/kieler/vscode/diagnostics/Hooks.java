@@ -19,6 +19,11 @@ public final class Hooks {
         catch (Exception error) { System.err.println("KIELER diagnostic tracing: " + error); }
     }
 
+    public static void loops(Processor<?, ?> processor) {
+        try { Loops.analyze(processor); }
+        catch (Exception error) { System.err.println("KIELER diagnostic tracing: " + error); }
+    }
+
     public static void nativeResult(Integer status, Processor<?, ?> processor, List<String> command, File directory, Logger logger) {
         if (!processor.getId().equals("de.cau.cs.kieler.kicool.deploy.compiler.c")) return;
         try { NativeDiagnostics.collect(status, processor, command, directory, logger); }

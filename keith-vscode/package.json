@@ -2,7 +2,7 @@
   "name": "keith-vscode",
   "displayName": "KIELER VS Code",
   "description": "KIELER for VS Code: SCCharts editing, diagrams, simulation and verification in one extension (CS303 build)",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "kieler",
   "author": "KIELER <kieler@rtsys.informatik.uni-kiel.de>",
   "icon": "icon.png",

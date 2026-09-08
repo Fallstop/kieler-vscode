@@ -33,7 +33,7 @@ import * as path from 'path'
 import * as vscode from 'vscode'
 import { contextKeys, diagramClientId } from './constants'
 import { StorageService } from './storage/storage-service'
-import { KlighDWebviewEndpoint } from './webview-endpoint'
+import { KlighDWebviewEndpoint, KlighDWebviewEndpointOptions } from './webview-endpoint'
 
 /**
  * Callback provided for other parts of the extension to intercept diagram actions before they
@@ -63,6 +63,11 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
     private readonly diagramChanged = new vscode.EventEmitter<void>()
 
     readonly onDidChangeDiagram = this.diagramChanged.event
+
+    private readonly modelReceived = new vscode.EventEmitter<void>()
+
+    /** Fires when the server delivers a diagram model, which is when a show request has really finished. */
+    readonly onDidReceiveModel = this.modelReceived.event
 
     constructor(
         options: LspWebviewPanelManagerOptions,
@@ -216,13 +221,15 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
     protected override createEndpoint(identifier: SprottyDiagramIdentifier): LspWebviewEndpoint {
         const webviewContainer = this.createWebview(identifier)
         const participant = this.messenger.registerWebviewPanel(webviewContainer)
-        const endpoint = new KlighDWebviewEndpoint({
+        const options: KlighDWebviewEndpointOptions = {
             languageClient: this.languageClient,
             webviewContainer,
             messenger: this.messenger,
             messageParticipant: participant,
             identifier,
-        })
+            onModelReceived: () => this.modelReceived.fire(),
+        }
+        const endpoint = new KlighDWebviewEndpoint(options)
 
         addWorkspaceEditActionHandler(endpoint as unknown as LspWebviewEndpoint)
         addLspLabelEditActionHandler(endpoint as unknown as LspWebviewEndpoint)

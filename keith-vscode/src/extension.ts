@@ -164,6 +164,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(settingsService)
 
     const compilationDataProvider = new CompilationDataProvider(lsClient, context, settingsService)
+    compilationDataProvider.awaitDiagram = () => diagrams.nextModel()
     context.subscriptions.push(
         new DiagnosticBridge(compilationDataProvider.diagnostics, diagrams, (uri, index) =>
             compilationDataProvider.show(uri, index)

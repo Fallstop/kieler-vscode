@@ -10,6 +10,7 @@ if (!fs.existsSync(server)) {
     process.exit(0)
 }
 const output = path.join(root, 'out/server-patch')
+fs.rmSync(output, { recursive: true, force: true })
 fs.mkdirSync(output, { recursive: true })
 function sources(dir) {
     return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
