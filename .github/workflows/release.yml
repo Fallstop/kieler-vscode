@@ -73,7 +73,9 @@ jobs:
               working-directory: keith-vscode
               env:
                   VSCE_PAT: ${{ secrets.VSCE_PAT }}
-              run: yarn vsce publish --packagePath sccharts-lab.vsix
+              # Not `vsce publish`: its fixed three-minute socket timeout is shorter than the
+              # Marketplace takes to process this package.
+              run: node scripts/publish-marketplace.cjs sccharts-lab.vsix
 
             - name: Publish to Open VSX
               if: env.OVSX_PAT != ''

@@ -17,6 +17,8 @@ async function main() {
     let stderr = ''
     server.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-12000) })
     const connection = createMessageConnection(new StreamMessageReader(server.stdout), new StreamMessageWriter(server.stdin))
+    // A hang is only diagnosable from the server's threads, which a CI log cannot show otherwise.
+    const threads = () => (spawnSync('jstack', [String(server.pid)], { encoding: 'utf8' }).stdout || '').trim()
     const waiters = new Set()
     connection.onNotification((method, params) => {
         for (const waiter of waiters) if (waiter.method === method && waiter.accept(params)) waiter.resolve(params)
@@ -25,7 +27,7 @@ async function main() {
     connection.onRequest('client/registerCapability', () => null)
     const waitFor = (method, accept = () => true) => new Promise((resolve, reject) => {
         const waiter = { method, accept, resolve: result => { clearTimeout(timer); waiters.delete(waiter); resolve(result) } }
-        const timer = setTimeout(() => { waiters.delete(waiter); reject(new Error(`Timeout: ${method}\n${stderr}`)) }, 40000)
+        const timer = setTimeout(() => { waiters.delete(waiter); reject(new Error(`Timeout: ${method}\n${stderr}\n${threads()}`)) }, 40000)
         waiters.add(waiter)
     })
     connection.listen()
@@ -91,7 +93,7 @@ async function main() {
             const settled = waitFor('diagram/accept', message => !!message.action?.newRoot)
             const overlapping = [schedulerIndex, -1, 0, -1].map(index => connection.sendRequest('keith/kicool/show', { uri: broken.uri, clientId: 'keith-diagram_sprotty', index }))
             overlapping.push(connection.sendNotification('diagram/accept', { clientId: 'keith-diagram_sprotty', action: { kind: 'requestModel', requestId: `overlap-${round}`, options: { sourceUri: broken.uri, diagramType: 'keith-diagram', needsClientLayout: false, needsServerLayout: true } } }))
-            const answers = await Promise.race([Promise.all(overlapping), new Promise((_, reject) => setTimeout(() => reject(new Error('Overlapping show requests hung')), 30000))])
+            const answers = await Promise.race([Promise.all(overlapping), new Promise((_, reject) => setTimeout(() => reject(new Error(`Overlapping show requests hung\n${threads()}`)), 30000))])
             assert.deepEqual(answers.slice(0, 4), ['OK', 'OK', 'OK', 'OK'])
             await settled
         }
