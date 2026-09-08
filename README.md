@@ -13,7 +13,7 @@ This monorepo is the home of SCCharts Lab, an independent fork of the KIELER VS 
 Development of this project requires [Node.js _v24.x_](https://nodejs.org) and
 [yarn _v1.x_](https://classic.yarnpkg.com/). Further, the language server jar and its
 Jetty libraries have to be present in `keith-vscode/server`. Run
-`yarn workspace keith-vscode fetch-server` to download and verify them against
+`yarn --cwd keith-vscode fetch-server` to download and verify them against
 `keith-vscode/server/manifest.json`.
 
 Diagram support is included. Building the bundled server diagnostic patch requires

@@ -33,10 +33,10 @@ jobs:
                       keith-vscode/server/kieler-language-server.jar
                       keith-vscode/server/jetty10
                   key: server-${{ hashFiles('keith-vscode/server/manifest.json') }}
-            - run: yarn workspace keith-vscode fetch-server
+            - run: yarn --cwd keith-vscode fetch-server
 
-            - run: yarn workspace keith-vscode test
-            - run: yarn workspace keith-vscode test:server
+            - run: yarn --cwd keith-vscode test
+            - run: yarn --cwd keith-vscode test:server
             - run: yarn tsc --noEmit -p keith-vscode/tsconfig.json
             - run: yarn tsc --noEmit -p keith-vscode/tsconfig.webview.json
             - run: yarn package
