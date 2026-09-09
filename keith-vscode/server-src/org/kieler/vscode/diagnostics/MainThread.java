@@ -9,18 +9,31 @@ import java.util.function.Consumer;
  * the whole queue drains, which only works while a single caller waits at a time. Once diagram
  * requests overlap, a wake-up can land on the wrong thread and everyone waits forever. Each
  * caller now waits for its own task and every state change wakes all waiters.
+ *
+ * A task can also re-enter: when a queued show-snapshot task finds the layout future already
+ * complete, the continuation runs on the main thread and asks for a layout, which queues work
+ * for the main thread and waits for it, that is, for itself. Work requested from the main
+ * thread therefore runs inline.
  */
 public final class MainThread {
+    private static final ThreadLocal<Boolean> ON_MAIN_THREAD = ThreadLocal.withInitial(() -> false);
+
     public static void enqueue(BlockingQueue<Consumer<Void>> queue, Consumer<Object> task) {
+        if (ON_MAIN_THREAD.get()) {
+            task.accept(null);
+            return;
+        }
         Throwable[] failure = new Throwable[1];
         boolean[] done = new boolean[1];
         synchronized (queue) {
             queue.add(ignored -> {
+                ON_MAIN_THREAD.set(true);
                 try {
                     task.accept(ignored);
                 } catch (Throwable t) {
                     failure[0] = t;
                 } finally {
+                    ON_MAIN_THREAD.set(false);
                     synchronized (queue) {
                         done[0] = true;
                         queue.notifyAll();

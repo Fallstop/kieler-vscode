@@ -35,7 +35,10 @@ each target method signature and fails the build if a server update changes it:
 - Main-thread hand-off: callers that queue work for KLighD's main thread waited on one shared
   notify() until the whole queue drained. With overlapping diagram requests a wake-up could go
   to the wrong caller and the server stalled with every thread waiting. Each caller now waits
-  on its own completion flag and the main loop wakes all waiters.
+  on its own completion flag and the main loop wakes all waiters. Work requested from the main
+  thread itself runs inline: a queued show-snapshot task whose layout future has already
+  completed continues on the main thread and asks for another layout, which would otherwise
+  queue behind itself forever.
 - Diagram concurrency: the bundled server held the diagram-state lock while it waited for
   KLighD's main thread, which the queued layout step also locks, so overlapping show or
   model requests deadlocked; it also let a synthesis rebuild the view model while another

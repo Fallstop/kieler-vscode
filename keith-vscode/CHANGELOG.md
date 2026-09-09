@@ -6,6 +6,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-09
+
+- Fixed a diagram hang: when a show-snapshot task on the language server's main thread found
+  its layout already finished, the follow-up ran on the main thread and queued a second layout
+  behind itself, so the server waited for itself forever. Work requested from the main thread
+  now runs inline. The release tests caught this once on a slow runner.
+
 ## [0.7.0] - 2026-09-09
 
 - The extension is 38 MB instead of 90 MB. The upstream KIELER language server JAR is an

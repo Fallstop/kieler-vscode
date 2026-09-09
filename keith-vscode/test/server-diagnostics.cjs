@@ -12,6 +12,8 @@ async function main() {
     const classpath = ['diagnostics.jar', 'jetty10/*', 'kieler-language-server.jar'].map(file => path.join(serverDir, file)).join(path.delimiter)
     const closedDiagram = spawnSync('java', ['-cp', classpath, path.join(__dirname, 'fixtures/DiagramRefreshCheck.java')], { encoding: 'utf8' })
     assert.equal(closedDiagram.status, 0, closedDiagram.stderr)
+    const reentrant = spawnSync('java', ['-cp', classpath, path.join(__dirname, 'fixtures/MainThreadCheck.java')], { encoding: 'utf8', timeout: 60000 })
+    assert.equal(reentrant.status, 0, reentrant.stderr || 'MainThreadCheck timed out')
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-diagnostics-'))
     const server = spawn('java', ['-Djava.awt.headless=true', '-cp', classpath, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: workspace })
     const closed = new Promise(resolve => server.once('close', resolve))
