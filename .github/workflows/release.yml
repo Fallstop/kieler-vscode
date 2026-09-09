@@ -42,8 +42,9 @@ jobs:
               with:
                   path: |
                       keith-vscode/server/kieler-language-server.jar
+                      keith-vscode/server/kieler-language-server.jar.stamp
                       keith-vscode/server/jetty10
-                  key: server-${{ hashFiles('keith-vscode/server/manifest.json') }}
+                  key: server-${{ hashFiles('keith-vscode/server/manifest.json', 'keith-vscode/scripts/trim-server.cjs') }}
             - run: yarn --cwd keith-vscode fetch-server
 
             - run: yarn --cwd keith-vscode test

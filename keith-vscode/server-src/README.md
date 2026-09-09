@@ -1,7 +1,8 @@
 # Compiler diagnostic patch
 
 `npm run build:server` compiles these Java 11 sources against the bundled
-`server/kieler-language-server.jar` and writes `server/diagnostics.jar`.
+`server/kieler-language-server.jar` (the trimmed JAR that `fetch-server` writes) and writes
+`server/diagnostics.jar`.
 The extension puts that small JAR first on the classpath, ahead of the existing
 Jetty compatibility libraries and the unchanged language server. End users need
 only Java; building requires a JDK. A client-only checkout can still build without

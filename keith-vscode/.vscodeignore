@@ -17,3 +17,5 @@ vsc-extension-quickstart.md
 
 server-src/**
 scripts/**
+
+server/*.stamp

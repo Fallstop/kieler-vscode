@@ -102,6 +102,11 @@ their compiler stage or generated-file location instead of guessing a source lin
 
 The language server and its Jetty libraries are not tracked in git. `yarn fetch-server`
 downloads them from the upstream Marketplace release and Maven Central and verifies them
-against `server/manifest.json`. Building the diagnostic patch needs a JDK 11 or newer;
-`yarn package` then produces `sccharts-lab.vsix`. Releases are published by tagging `vX.Y.Z`
+against `server/manifest.json`. The upstream server JAR is a 94 MB Eclipse product export;
+`scripts/trim-server.cjs` strips the parts a headless server never runs (Eclipse workbench,
+JDT, ICU locale data, BouncyCastle, JNA natives, documentation images) down to about 37 MB.
+The download is cached in `out/upstream/` and the trimmed JAR in `server/` carries a stamp,
+so the trim reruns only when the upstream hash or the script changes. Trimming needs `zip`
+and `unzip`. Building the diagnostic patch needs a JDK 11 or newer; `yarn package` then
+produces `sccharts-lab.vsix`. Releases are published by tagging `vX.Y.Z`
 (matching `package.json`) on GitHub, which runs `.github/workflows/release.yml`.

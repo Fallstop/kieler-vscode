@@ -8,6 +8,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [0.7.0] - 2026-09-09
 
+- The extension is 38 MB instead of 90 MB. The upstream KIELER language server JAR is an
+  Eclipse product export that shades in the Eclipse workbench, JDT, ICU locale data,
+  BouncyCastle, JNA natives for every platform and ELK's documentation images; none of it runs
+  in a headless language server. `fetch-server` now trims those packages out of the JAR before
+  it is packaged, keeping any class that surviving code still references so the JVM verifier
+  is satisfied. The real-server tests and a check across Esterel, Lustre, SCL, KGraph and ELK
+  models behave identically on the trimmed JAR.
 - The KIELER sidebar (compiler tree, model checker, simulation table) is gone, and with it the
   broken activity bar icon. Compiler stages are browsed with **Show Compilation Stage...**
   (**Stages** above the preview, the editor title menu, or the Command Palette). The model

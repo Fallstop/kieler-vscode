@@ -8,7 +8,8 @@ const { createMessageConnection, StreamMessageReader, StreamMessageWriter } = re
 
 async function main() {
     const extension = path.resolve(__dirname, '..')
-    const classpath = ['diagnostics.jar', 'jetty10/*', 'kieler-language-server.jar'].map(file => path.join(extension, 'server', file)).join(path.delimiter)
+    const serverDir = process.env.KIELER_SERVER_DIR ?? path.join(extension, 'server')
+    const classpath = ['diagnostics.jar', 'jetty10/*', 'kieler-language-server.jar'].map(file => path.join(serverDir, file)).join(path.delimiter)
     const closedDiagram = spawnSync('java', ['-cp', classpath, path.join(__dirname, 'fixtures/DiagramRefreshCheck.java')], { encoding: 'utf8' })
     assert.equal(closedDiagram.status, 0, closedDiagram.stderr)
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-diagnostics-'))
