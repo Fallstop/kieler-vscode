@@ -39,6 +39,14 @@ export interface SimulationVariableState {
 
 export type SimulationPhase = 'idle' | 'starting' | 'running' | 'stopping'
 
+/** A compiler stage shown in the diagram instead of the source model. */
+export interface ShownStageState {
+    name: string
+    /** Position among all stages, 1-based, and their count. */
+    position: number
+    count: number
+}
+
 export interface SimulationViewState {
     phase: SimulationPhase
     canStart: boolean
@@ -53,6 +61,12 @@ export interface SimulationViewState {
     model?: string
     variables: SimulationVariableState[]
     error?: string
+    /** The model was edited after the running simulation was built; Restart rebuilds it. */
+    stale?: boolean
+    /** Set while the diagram shows a compiler stage rather than the model. */
+    stage?: ShownStageState
+    /** The model is an SCCharts file on disk, so C or Java can be generated from it. */
+    canGenerate?: boolean
 }
 
 export type SimulationViewCommand =
@@ -69,6 +83,10 @@ export type SimulationViewCommand =
     | { kind: 'setInput'; id: string; value: unknown }
     | { kind: 'setStepDelay'; delay: number }
     | { kind: 'setShowInternal'; enabled: boolean }
+    | { kind: 'rebuild' }
+    | { kind: 'showModel' }
+    | { kind: 'showStage' }
+    | { kind: 'generateCode' }
 
 export const simulationStateNotification: NotificationType<SimulationViewState> = {
     method: 'keith/simulation/viewState',

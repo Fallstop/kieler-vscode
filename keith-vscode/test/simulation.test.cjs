@@ -39,7 +39,13 @@ function setup(t) {
             showErrorMessage: async () => undefined,
             showQuickPick: async (items) => items[0],
         },
+        workspace: {
+            onDidChangeTextDocument: (handler) => { textChanges.add(handler); return { dispose: () => textChanges.delete(handler) } },
+            openTextDocument: async (uri) => documents.get(uri.toString()) ?? { uri, isDirty: false, getText: () => '', save: async () => true },
+        },
     }
+    const textChanges = new Set()
+    const documents = new Map()
     const client = {
         start: async () => {},
         onNotification: (name, handler) => { notifications.set(name, handler); return { dispose: noop } },
@@ -55,14 +61,15 @@ function setup(t) {
         editor: { document: { uri: vscode.Uri.parse('file:///models/clock.sctx'), isDirty: false } },
         compile: async () => {},
     }
-    const load = createLoader({ vscode, 'vscode-languageclient/node': { State: { Stopped: 1 } }, '@kieler/table-webview/lib/table-webview': {} })
+    const load = createLoader({ vscode, 'vscode-languageclient/node': { State: { Stopped: 1 } } })
     const { SimulationTableDataProvider } = load('src/simulation/simulation-table-data-provider.ts')
     const settings = { get: (key) => key === 'simulationStepDelay' ? 1 : 'Manual' }
     const sim = new SimulationTableDataProvider(client, compiler, { subscriptions: [] }, settings)
     t.after(() => sim.dispose())
     const started = { successful: true, dataPool: { input: false, output: 0 }, propertySet: { input: ['input'], output: ['output'] } }
     const start = async () => { await sim.simulate(); await sim.handleSimulationStarted(started) }
-    return { sim, client, compiler, sent, commands, started, start, state }
+    const edit = (document) => { for (const handler of textChanges) handler({ document }) }
+    return { sim, client, compiler, sent, commands, started, start, state, edit, documents, vscode }
 }
 
 test('simulation starts without ever opening the sidebar and deduplicates starts', async (t) => {
@@ -157,6 +164,7 @@ test('snapshot compilation sets the simulation start flag before compilation beg
     sim.registerSimulationCommands({ systems: [], snapshotSystems: [{ id: 'sim', label: 'Sim', snapshotSystem: true }] })
     let args
     compiler.compile = async (...values) => { assert.equal(sim.compilingSimulation, true); args = values }
+    compiler.editor.document.getText = () => 'scchart A {}'
     await sim.compileAndSimulate(true)
     assert.deepEqual(args, ['sim', true, false, true, 'file:///models/clock.sctx'])
 })
@@ -302,4 +310,46 @@ test('null strings and string arrays stay editable across server updates without
     sim.setInputValue(sim.simulationData.get('text'), 'next')
     sim.handleStepMessage({ values: { text: null } })
     assert.equal(sim.valuesForNextStep.get('text'), 'next')
+})
+
+test('editing the simulated model marks the run stale and Restart rebuilds it with the same system', async (t) => {
+    const { sim, compiler, sent, started, vscode, edit: edited } = setup(t)
+    sim.registerSimulationCommands({ systems: [{ id: 'sim.c', label: 'C', snapshotSystem: false }], snapshotSystems: [] })
+    const document = compiler.editor.document
+    let text = 'scchart A {}'
+    document.getText = () => text
+    document.save = async () => true
+    const builds = []
+    compiler.compile = async (...values) => { builds.push(values) }
+    await sim.compileAndSimulate(false)
+    assert.deepEqual(builds, [['sim.c', true, false, false, 'file:///models/clock.sctx']])
+    sim.compilationFinished(true)
+    await sim.handleSimulationStarted(started)
+    assert.equal(sim.phase, 'running')
+    assert.equal(sim.stale, false)
+    // Edits to other files never matter; edits to the simulated model do, until they are undone.
+    const changes = []
+    const subscription = sim.onDidChangeViewState(() => changes.push(sim.stale))
+    t.after(() => subscription.dispose())
+    const edit = (uri, newText) => { text = newText; edited({ uri: vscode.Uri.parse(uri), getText: () => newText }) }
+    edit('file:///models/other.sctx', 'x')
+    assert.equal(sim.stale, false)
+    edit('file:///models/clock.sctx', 'scchart A { input bool i }')
+    assert.equal(sim.stale, true)
+    edit('file:///models/clock.sctx', 'scchart A {}')
+    assert.equal(sim.stale, false)
+    edit('file:///models/clock.sctx', 'scchart A { input bool i }')
+    assert.deepEqual(changes, [true, false, true])
+    // Restart now stops, saves, and compiles again with the remembered system instead of asking.
+    vscode.window.showQuickPick = async () => assert.fail('Rebuild must not prompt for a system')
+    await sim.restartSimulation()
+    assert.equal(builds.length, 2)
+    assert.deepEqual(builds[1], ['sim.c', true, false, false, 'file:///models/clock.sctx'])
+    assert.equal(sim.stale, false)
+    assert.equal(sim.phase, 'starting')
+    assert.equal(sent.filter((message) => message.name === 'keith/simulation/start').length, 1)
+    sim.compilationFinished(true)
+    await sim.handleSimulationStarted(started)
+    assert.equal(sim.phase, 'running')
+    assert.equal(sent.filter((message) => message.name === 'keith/simulation/start').length, 2)
 })

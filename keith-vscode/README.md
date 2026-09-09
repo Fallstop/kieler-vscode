@@ -25,6 +25,14 @@ Adds language support for various languages that are part of the
 
 Diagram visualization and simulation are included in this extension. Open a model's
 preview to simulate, step through ticks, edit inputs, and inspect its variable trace.
+Everything lives in the editor area: there is no sidebar. The preview's toolbar carries
+**Simulate**, the transport controls, **Stages** (browse the compiler's intermediate models)
+and **Code** (generate C or Java). While a compiler stage is shown, **Model** brings the
+diagram back to the SCChart.
+
+Editing a model while its simulation runs marks the run as out of date: **Restart** becomes
+**Rebuild**, which compiles the model again with the same simulation system and starts over
+from tick 0. Unsaved edits are saved first.
 
 Compilation failures appear above the diagram and in VS Code Problems. Scheduler
 conflicts link to the participating source operations and explain their circular
@@ -36,9 +44,12 @@ involved operations. Source links reuse the model's existing editor tab.
 
 A **Potential instantaneous loop** warning comes from the compiler's loop analyzer: control
 flow or a data dependency can return to the listed operations without crossing a tick
-boundary. When the model still compiles, the loop usually spans a clock or variable that
-every transition of a cycle resets, and the warning is advisory. When the scheduler rejects
-the model instead, its cycle error replaces the warning.
+boundary. Timed transitions (`if elapsed >= t`) produce this warning on every cycle of
+states, because the compiler tests each timeout in the tick its state is entered and the
+analyzer cannot see that a clock reset on entry keeps the timeout from firing again. The
+warning names the clock and the timed transitions; it is advisory as long as every state
+on the loop resets the clock on entry and no timeout is 0. When the scheduler rejects the
+model instead, its cycle error replaces the warning.
 
 Source edits mark old diagnostics as stale until the next compilation. Compatible
 fixed-size array assignments offer a **Copy array elements individually** quick fix
@@ -47,9 +58,12 @@ modeling decisions.
 
 ### Generate C and Java
 
-Open an `.sctx` model and run **SCCharts: Generate Code...** from the Command Palette,
-the editor's **More Actions** menu, or the file's Explorer context menu. Choose **C**,
-**Java**, or **C and Java**. Unsaved edits to the source model are saved before compilation.
+Open an `.sctx` model and use the **Generate Code** icon in the editor title, the **Code**
+button above the diagram preview, **SCCharts: Generate Code...** from the Command Palette,
+or the file's Explorer context menu. Choose **C**, **Java**, or **C and Java**. Unsaved edits
+to the source model are saved before compilation. **Compile current model with...** and a
+code-producing system (for example *Netlist-based Compilation*) opens the same tabs instead of
+drawing the code as a diagram.
 
 Generated `.c`/`.h` and `.java` files open as read-only virtual documents. Generated files
 are not written to your project until you save them. Use VS Code's **Save As...** or the
@@ -58,7 +72,7 @@ saves a target's complete set (including C headers) to a chosen folder and asks 
 replacing existing files. Each generation opens separate previews; closing them discards
 the unsaved output. Save files you want to keep before closing the window.
 
-Generation errors appear in Problems and the compiler panel. Models with C-only host
+Generation errors appear in Problems. Models with C-only host
 code cannot generate Java without matching Java implementations, and vice versa.
 Failed, cancelled, or stale results never open as generated files. When generating both
 targets, a successful target remains available if the other fails.
@@ -74,7 +88,7 @@ external server that does not return generated files produces an explicit error.
 ## Requirements
 
 SCCharts Lab is incompatible with the original **KIELER VS Code** extension
-(`kieler.keith-vscode`): both register the same commands, languages and views and each
+(`kieler.keith-vscode`): both register the same commands and languages and each
 starts its own language server. SCCharts Lab refuses to activate while that extension is
 enabled. Disable or uninstall it, then reload the window.
 

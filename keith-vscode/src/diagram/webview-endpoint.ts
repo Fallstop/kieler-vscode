@@ -23,6 +23,7 @@ import { LspWebviewEndpointOptions, acceptMessageType } from 'sprotty-vscode/lib
 import { ResponseMessage } from 'vscode-jsonrpc/lib/common/messages'
 import { LanguageClient } from 'vscode-languageclient/node'
 
+/** Returns (or resolves to) false to keep the action from being forwarded to the language server. */
 type ActionHandler = (action: Action) => unknown
 
 export interface KlighDWebviewEndpointOptions extends LspWebviewEndpointOptions {
@@ -90,14 +91,23 @@ export class KlighDWebviewEndpoint extends WebviewEndpoint {
         this.disposables.push(
             this.messenger.onNotification(
                 LspNotification,
-                (notification) => {
+                async (notification) => {
                     // Catch any diagram/accept action and call the registered action handlers.
                     if (notification.method === 'diagram/accept' && isActionMessage(notification.params)) {
                         const { action } = notification.params
                         const handlers = this.klighdActionHandlers.get(notification.params.action.kind)
                         if (handlers) {
-                            handlers.forEach((handler) => handler(action))
-                            // TODO: if one of the handlers says the action does not need to be forwarded to the server, do not forward it.
+                            const results = await Promise.all(
+                                handlers.map(async (handler) => {
+                                    try {
+                                        return await handler(action)
+                                    } catch {
+                                        return true
+                                    }
+                                })
+                            )
+                            // A handler that answered the action itself keeps it off the server.
+                            if (results.some((result) => result === false)) return
                         }
                     }
                     this.languageClient.sendNotification(notification.method, notification.params)

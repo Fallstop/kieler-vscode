@@ -59,6 +59,9 @@ export class Toolbar {
             state.error,
             state.stepDelay,
             state.showInternal,
+            state.stale,
+            state.stage,
+            state.canGenerate,
             this.host.drawerOpen(),
         ])
         if (key === this.renderKey) {
@@ -76,6 +79,7 @@ export class Toolbar {
             icon('circuit-board'),
             h('span.kv-model-name', {}, state.model ?? 'KIELER Preview')
         )
+        const busy = state.phase === 'starting' || state.phase === 'stopping'
         const right = h(
             'div.kv-toolbar-right',
             {},
@@ -91,12 +95,56 @@ export class Toolbar {
             state.phase === 'running' &&
                 this.toggle('layout-panel', 'Trace', this.host.drawerOpen(), 'Show the tick-by-tick trace', () =>
                     this.host.toggleDrawer()
+                ),
+            !busy &&
+                h(
+                    'div.kv-btn-group.kv-btn-group-quiet',
+                    {},
+                    this.button(
+                        'list-tree',
+                        'Stages',
+                        'Show what the compiler makes of this model, one stage at a time',
+                        () => this.host.send({ kind: 'showStage' }),
+                        '.kv-btn-quiet'
+                    ),
+                    state.canGenerate &&
+                        this.button(
+                            'code',
+                            'Code',
+                            'Generate C or Java from this model and open it in the editor',
+                            () => this.host.send({ kind: 'generateCode' }),
+                            '.kv-btn-quiet'
+                        )
                 )
         )
-        replaceChildren(this.el, model, this.middle(state), right)
+        replaceChildren(this.el, model, state.stage ? this.stageBar(state) : this.middle(state), right)
         if (focusKey) {
             this.el.querySelector<HTMLElement>(`[data-control="${focusKey}"]`)?.focus({ preventScroll: true })
         }
+    }
+
+    /** Replaces the transport controls while the diagram shows a compiler stage instead of the model. */
+    private stageBar(state: SimulationViewState): HTMLElement {
+        const stage = state.stage!
+        return h(
+            'div.kv-toolbar-middle.kv-stage',
+            {},
+            this.button('arrow-left', 'Model', 'Show the model diagram again', () =>
+                this.host.send({ kind: 'showModel' })
+            ),
+            h(
+                'span.kv-stage-name',
+                { title: `Compiler stage ${stage.position} of ${stage.count}: ${stage.name}` },
+                h('span.kv-stage-label', {}, `Stage ${stage.position}/${stage.count}`),
+                h('span.kv-stage-value', {}, stage.name)
+            ),
+            state.phase === 'running' &&
+                h(
+                    'span.kv-status',
+                    { title: 'The simulation keeps running; the model diagram shows its states' },
+                    `Tick ${state.tick}`
+                )
+        )
     }
 
     private middle(state: SimulationViewState): HTMLElement {
@@ -144,9 +192,21 @@ export class Toolbar {
             h(
                 'div.kv-btn-group',
                 {},
-                this.button('debug-restart', 'Restart', 'Start over from tick 0 with the same compiled model', () =>
-                    this.host.send({ kind: 'restart' })
-                ),
+                // Once the model was edited, starting the old build over is never what is wanted.
+                state.stale
+                    ? this.button(
+                          'sync',
+                          'Rebuild',
+                          'The model was edited after this simulation was built: compile it again and start over from tick 0',
+                          () => this.host.send({ kind: 'rebuild' }),
+                          '.kv-btn-stale'
+                      )
+                    : this.button(
+                          'debug-restart',
+                          'Restart',
+                          'Start over from tick 0 with the same compiled model',
+                          () => this.host.send({ kind: 'restart' })
+                      ),
                 this.button(
                     'debug-step-over',
                     'Step',

@@ -16,6 +16,7 @@
  */
 
 import * as vscode from 'vscode'
+import { GENERATE_CODE } from './kico/code-generation'
 import { ADD_CO_SIMULATION, SIMULATE } from './simulation/commands'
 
 // Take a look at the `klighd-vscode` extension for more documentation about action
@@ -37,14 +38,21 @@ export const performActionKind = 'performAction'
 
 /**
  * Action handler that is registered in `klighd-diagram` to catch and handle {@link PerformActionAction}.
+ * Returns false for actions handled here; those are not forwarded to the language server, which
+ * knows neither the Eclipse editor actions nor how to answer them and would throw instead.
  */
-export async function handlePerformAction(action: PerformActionAction): Promise<boolean> {
+export async function handlePerformAction(
+    action: PerformActionAction,
+    modelUri?: vscode.Uri,
+    target?: 'c' | 'java'
+): Promise<boolean> {
     if (action.kind !== performActionKind) return true
 
     switch (action.actionId) {
         case openInEditorId:
-            // TODO
-            vscode.window.showInformationMessage('Triggered perform action to open in editor.')
+            // The code view is a diagram of the compiler's code container; the generated files
+            // themselves live in read-only editor tabs, which Generate Code opens.
+            vscode.commands.executeCommand(GENERATE_CODE, modelUri, target)
             return false
         case startSimulationId:
             // TODO needs to be tested

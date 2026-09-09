@@ -2,16 +2,16 @@
 import * as vscode from 'vscode'
 import { CompilationDataProvider } from './compilation-data-provider'
 import { CodeTarget, generateModel } from './generate-model'
-import { GeneratedCodeDocuments } from './generated-code-documents'
 
 export const GENERATE_CODE = 'keith-vscode.generate-code'
 
+/** The optional second argument skips the language prompt, e.g. when the diagram's code view is clicked. */
 export function registerCodeGeneration(context: vscode.ExtensionContext, compiler: CompilationDataProvider): void {
-    const documents = new GeneratedCodeDocuments()
+    const { documents } = compiler
     let running = false
     context.subscriptions.push(
         documents,
-        vscode.commands.registerCommand(GENERATE_CODE, async (uri?: vscode.Uri) => {
+        vscode.commands.registerCommand(GENERATE_CODE, async (uri?: vscode.Uri, preset?: CodeTarget) => {
             if (running || compiler.compiling) {
                 vscode.window.showInformationMessage('A compilation is already in progress.')
                 return
@@ -23,18 +23,21 @@ export function registerCodeGeneration(context: vscode.ExtensionContext, compile
                     throw new Error('Open an SCCharts (.sctx) model to generate code.')
                 }
                 const document = await vscode.workspace.openTextDocument(source)
-                const choice = await vscode.window.showQuickPick(
-                    [
-                        { label: 'C', targets: ['c'] as CodeTarget[], description: 'C source and headers' },
-                        { label: 'Java', targets: ['java'] as CodeTarget[], description: 'Java source' },
-                        {
-                            label: 'C and Java',
-                            targets: ['c', 'java'] as CodeTarget[],
-                            description: 'Generate each target separately',
-                        },
-                    ],
-                    { title: 'Generate Code', placeHolder: 'Choose a target language' }
-                )
+                const choice =
+                    preset === 'c' || preset === 'java'
+                        ? { targets: [preset] as CodeTarget[] }
+                        : await vscode.window.showQuickPick(
+                              [
+                                  { label: 'C', targets: ['c'] as CodeTarget[], description: 'C source and headers' },
+                                  { label: 'Java', targets: ['java'] as CodeTarget[], description: 'Java source' },
+                                  {
+                                      label: 'C and Java',
+                                      targets: ['c', 'java'] as CodeTarget[],
+                                      description: 'Generate each target separately',
+                                  },
+                              ],
+                              { title: 'Generate Code', placeHolder: 'Choose a target language' }
+                          )
                 if (!choice) return
                 // KIELER compiles files from disk; saving must not trigger a competing auto-compilation.
                 compiler.generatingCode = true

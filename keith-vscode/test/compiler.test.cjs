@@ -11,9 +11,9 @@ function setup() {
     const { CompilationDataProvider } = load('src/kico/compilation-data-provider.ts')
     const compiler = Object.create(CompilationDataProvider.prototype)
     const finished = []
-    for (const map of ['isCompiled', 'resultMap', 'lengthMap', 'indexMap']) compiler[map] = new Map()
+    for (const map of ['isCompiled', 'resultMap', 'lengthMap', 'indexMap', 'shownStage', 'pendingResults']) compiler[map] = new Map()
     compiler.compilationFinishedEmitter = { fire: (success) => finished.push(success) }
-    compiler._onDidChangeTreeData = { fire() {} }
+    compiler.stageChangedEmitter = { fire() {} }
     compiler.compilation = { show() {} }
     compiler.output = { appendLine() {} }
     compiler.startTime = Date.now()

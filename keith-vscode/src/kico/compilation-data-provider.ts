@@ -20,19 +20,18 @@ import { LanguageClient } from 'vscode-languageclient/node'
 import { Utils } from 'vscode-uri'
 import { CompilerDiagnostics } from './compiler-diagnostics'
 import { CompilerIssue } from './diagnostic-protocol'
-import type { GeneratedFile } from './generated-code-documents'
+import { GeneratedCodeDocuments, GeneratedFile } from './generated-code-documents'
 import { Settings } from '../constants'
 import { SettingsService } from '../settings'
 import {
     COMPILE_COMMAND,
     COMPILE_SNAPSHOT_COMMAND,
-    OPEN_KIELER_VIEW,
     REQUEST_CS,
-    SHOW_COMMAND,
+    SHOW_MODEL,
     SHOW_NEXT,
     SHOW_PREVIOUS,
+    SHOW_STAGE,
     TOGGLE_AUTO_COMPILE,
-    TOGGLE_BUTTON_MODE,
     TOGGLE_INPLACE,
     TOGGLE_PRIVATE_SYSTEMS,
     TOGGLE_SHOW_RESULTING_MODEL,
@@ -55,13 +54,31 @@ export const compilationSystemsMessageType = 'keith/kicool/compilation-systems'
 
 export const diagramType = 'keith-diagram'
 
-export class CompilationDataProvider implements vscode.TreeDataProvider<SnapshotDescription> {
+/** A compiler stage other than the source model that the diagram preview currently shows. */
+export interface ShownStage {
+    name: string
+    index: number
+    count: number
+}
+
+export class CompilationDataProvider {
     readonly diagnostics = new CompilerDiagnostics()
 
     /** Set by the extension: resolves once the diagram view received the model a show request produced. */
     awaitDiagram: (() => Promise<void>) | undefined
 
     private showQueue: Promise<void> = Promise.resolve()
+
+    /** Index of the stage the diagram shows per model URI; -1 or absent is the source model. */
+    private readonly shownStage = new Map<string, number>()
+
+    private readonly stageChangedEmitter = new vscode.EventEmitter<void>()
+
+    /** Fires when the diagram switches between the source model and a compiler stage. */
+    readonly onDidChangeStage: vscode.Event<void> = this.stageChangedEmitter.event
+
+    /** Compiles started by the Compile command still owe the user the resulting model or code. */
+    private readonly pendingResults = new Map<string, boolean>()
 
     editor: vscode.TextEditor | undefined = undefined
 
@@ -146,21 +163,20 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
     constructor(
         private lsClient: LanguageClient,
         readonly context: vscode.ExtensionContext,
-        private readonly settings: SettingsService<Settings>
+        private readonly settings: SettingsService<Settings>,
+        /** Generated C and Java open as read-only editor tabs instead of a diagram. */
+        readonly documents: GeneratedCodeDocuments = new GeneratedCodeDocuments()
     ) {
         // Output channel
         this.output = vscode.window.createOutputChannel('KIELER Compilation')
-        this.context.subscriptions.push(this.diagnostics, this.output)
-
-        // TODO call treeview.reveal(item, {focus: true}); to reveal tree view after compilation finished
-        // The item that is revealed should maybe be the last one. Also this provider may need access to the tree view.
+        this.context.subscriptions.push(this.diagnostics, this.output, this.stageChangedEmitter)
 
         // Status bar item for compilation
         this.requestSystems = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left)
         this.requestSystems.command = REQUEST_CS.command
         this.context.subscriptions.push(this.requestSystems)
         this.compilation = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left)
-        this.compilation.command = OPEN_KIELER_VIEW.command
+        this.compilation.command = SHOW_STAGE.command
         this.context.subscriptions.push(this.compilation)
 
         // Bind notifications to receive
@@ -335,39 +351,8 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         )
 
         this.context.subscriptions.push(
-            vscode.commands.registerCommand(TOGGLE_BUTTON_MODE.command, () => {
-                const options: vscode.QuickPickItem[] = [
-                    {
-                        label: 'true',
-                        picked: this.settings.get('showButtons.enabled'),
-                    },
-                    {
-                        label: 'false',
-                        picked: !this.settings.get('showButtons.enabled'),
-                    },
-                ]
-                const quickPick = vscode.window.createQuickPick()
-                quickPick.items = options
-                quickPick.onDidChangeSelection((selection) => {
-                    if (selection[0]) {
-                        this.settings.set('showButtons.enabled', selection[0]?.label === 'true')
-                    }
-                    quickPick.hide()
-                })
-
-                quickPick.onDidHide(() => quickPick.dispose())
-                quickPick.show()
-            })
-        )
-
-        this.context.subscriptions.push(
-            vscode.commands.registerCommand(
-                SHOW_COMMAND.command,
-                async (snapshot) => {
-                    this.show(this.lastCompiledUri, snapshot.index)
-                },
-                this
-            )
+            vscode.commands.registerCommand(SHOW_STAGE.command, (uri?: vscode.Uri) => this.pickStage(uri)),
+            vscode.commands.registerCommand(SHOW_MODEL.command, (uri?: vscode.Uri) => this.showModel(uri))
         )
 
         this.context.subscriptions.push(
@@ -381,12 +366,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                     if (selection[0]) {
                         this.systems.forEach((system) => {
                             if (system.label === selection[0].label) {
-                                this.compile(
-                                    system.id,
-                                    this.settings.get('compileInplace.enabled'),
-                                    this.settings.get('showResultingModel.enabled'),
-                                    system.snapshotSystem
-                                )
+                                this.compileAndPresent(system.id, system.snapshotSystem)
                             }
                         })
                     }
@@ -406,12 +386,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                     if (selection[0]) {
                         this.snapshotSystems.forEach((system) => {
                             if (system.label === selection[0].label) {
-                                this.compile(
-                                    system.id,
-                                    this.settings.get('compileInplace.enabled'),
-                                    this.settings.get('showResultingModel.enabled'),
-                                    system.snapshotSystem
-                                )
+                                this.compileAndPresent(system.id, system.snapshotSystem)
                             }
                         })
                     }
@@ -431,6 +406,135 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
             })
         })
         return quickPicks
+    }
+
+    /**
+     * Compiles for the user and presents the result: generated C or Java opens as editor tabs, any
+     * other final model is shown in the diagram (when the setting asks for it). The server is never
+     * asked to show the result itself, so a code container no longer replaces the model diagram.
+     */
+    async compileAndPresent(systemId: string, snapshot: boolean): Promise<void> {
+        const uri = this.editor?.document.uri.toString()
+        if (!uri) {
+            vscode.window.showErrorMessage('Open a model to compile it.')
+            return
+        }
+        this.pendingResults.set(uri, this.settings.get('showResultingModel.enabled'))
+        try {
+            await this.compile(systemId, this.settings.get('compileInplace.enabled'), false, snapshot, uri)
+        } catch (error) {
+            this.pendingResults.delete(uri)
+            vscode.window.showErrorMessage(`Could not compile: ${error instanceof Error ? error.message : error}`)
+        }
+    }
+
+    /**
+     * Presents a finished compilation. The diagram either shows the new final stage or, when the
+     * result is code or nothing was asked for, returns to the source model: the stages it showed
+     * before belonged to the previous compilation, and a diagram nobody can leave was the old bug.
+     */
+    private async presentResult(uri: string, results: CompilationResults, errorOccurred: boolean): Promise<void> {
+        const showModel = this.pendingResults.get(uri)
+        this.pendingResults.delete(uri)
+        const wasShowingStage = (this.shownStage.get(uri) ?? -1) !== -1
+        const files = results.generatedFiles
+        if (showModel !== undefined && !errorOccurred && files?.length) {
+            const target = files.some((file) => file.fileName.endsWith('.java')) ? 'java' : 'c'
+            try {
+                await this.documents.open(vscode.Uri.parse(uri), target, files)
+            } catch (error) {
+                vscode.window.showErrorMessage(`Could not open the generated code: ${String(error)}`)
+            }
+        } else if (showModel && !errorOccurred && (this.lengthMap.get(uri) ?? 0) > 0) {
+            await this.show(uri, (this.lengthMap.get(uri) ?? 1) - 1).catch((error) =>
+                vscode.window.showErrorMessage(String(error))
+            )
+            return
+        }
+        if (wasShowingStage) await this.show(uri, -1).catch(() => this.setShownStage(uri, -1))
+    }
+
+    /** The stage the diagram shows for a model, or undefined for the source model. */
+    currentStage(uri: string | undefined): ShownStage | undefined {
+        if (!uri) return undefined
+        const index = this.shownStage.get(uri)
+        const results = this.resultMap.get(uri)
+        if (index === undefined || index < 0 || !results) return undefined
+        const stages = results.files.flat()
+        const stage = stages[index]
+        return stage ? { name: stage.name, index, count: stages.length } : undefined
+    }
+
+    private setShownStage(uri: string, index: number): void {
+        const previous = this.shownStage.get(uri) ?? -1
+        this.shownStage.set(uri, index)
+        if (previous !== index) this.stageChangedEmitter.fire()
+    }
+
+    /** Called when the diagram is rebuilt from the source, which forgets any shown stage. */
+    diagramReset(uri: string | undefined): void {
+        if (uri && (this.shownStage.get(uri) ?? -1) !== -1) this.setShownStage(uri, -1)
+    }
+
+    /** Brings the diagram back to the source model after a stage was shown. */
+    async showModel(uri?: vscode.Uri | string): Promise<void> {
+        const key = this.targetUri(uri)
+        if (!key) return
+        if ((this.shownStage.get(key) ?? -1) === -1) return
+        await this.show(key, -1)
+    }
+
+    /** Lets the user pick a stage of the last compilation of a model; this replaced the compiler tree view. */
+    async pickStage(uri?: vscode.Uri | string): Promise<void> {
+        const key = this.targetUri(uri)
+        const results = key ? this.resultMap.get(key) : undefined
+        if (!key || !results || !results.files.length) {
+            const choice = await vscode.window.showInformationMessage(
+                'Compile the model first to browse its compilation stages.',
+                'Compile...'
+            )
+            if (choice) await vscode.commands.executeCommand(COMPILE_COMMAND.command)
+            return
+        }
+        const shown = this.shownStage.get(key) ?? -1
+        const items: (vscode.QuickPickItem & { index: number })[] = [
+            {
+                label: `$(symbol-class) ${Utils.basename(vscode.Uri.parse(key))}`,
+                description: shown === -1 ? 'shown' : 'source model',
+                index: -1,
+            },
+        ]
+        let index = 0
+        results.files.forEach((group) => {
+            const groupName = group.length > 1 ? group[0].name : undefined
+            group.forEach((stage) => {
+                const problems = stage.errors?.length
+                    ? '$(error) '
+                    : stage.warnings?.length
+                      ? '$(warning) '
+                      : stage.infos?.length
+                        ? '$(info) '
+                        : ''
+                items.push({
+                    label: `${problems}${groupName && stage.name !== groupName ? `${groupName} › ` : ''}${stage.name}`,
+                    description: `${index + 1}/${results.files.flat().length}${index === shown ? ' · shown' : ''}`,
+                    detail: stage.errors?.[0] ?? stage.warnings?.[0],
+                    index,
+                })
+                index++
+            })
+        })
+        const choice = await vscode.window.showQuickPick(items, {
+            title: 'Show Compilation Stage',
+            placeHolder: 'Choose what the diagram preview shows',
+            matchOnDescription: true,
+        })
+        if (choice) await this.show(key, choice.index).catch((error) => vscode.window.showErrorMessage(String(error)))
+    }
+
+    private targetUri(uri?: vscode.Uri | string): string | undefined {
+        if (uri) return typeof uri === 'string' ? uri : uri.toString()
+        return this.editor?.document.uri.toString() ?? this.lastCompiledUri
     }
 
     /**
@@ -522,6 +626,7 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
             const result = await this.lsClient.sendRequest(SHOW, { uri, clientId: `${diagramType}_sprotty`, index })
             if (result === 'ERR') throw new Error('The compiler diagram could not be opened.')
             this.indexMap.set(uri, index)
+            this.setShownStage(uri, index)
             // Original model must not fire this emitter.
             if (index !== -1) this.showedNewSnapshotEmitter.fire('Success')
             await delivered
@@ -599,22 +704,11 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         results ??= {
             files: [
                 [
-                    new SnapshotDescription(
-                        'Source model',
-                        '',
-                        vscode.TreeItemCollapsibleState.None,
-                        'Source model',
-                        0,
-                        0,
-                        ['The model could not be loaded. Check the source errors in Problems.']
-                    ),
+                    new SnapshotDescription('Source model', '', undefined, 'Source model', 0, 0, [
+                        'The model could not be loaded. Check the source errors in Problems.',
+                    ]),
                 ],
             ],
-        }
-        // Show next/previous command and keybinding if not already added
-        if (!(await vscode.commands.getCommands()).includes(SHOW_NEXT.command)) {
-            this.registerShowNext()
-            this.registerShowPrevious()
         }
         this.isCompiled.set(uri as string, true)
         this.resultMap.set(uri as string, results)
@@ -632,35 +726,24 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
                 array.forEach((e) => {
                     const element = e
                     if (element.infos && element.infos.length > 0) {
-                        element.iconPath = new vscode.ThemeIcon('info')
-                        element.tooltip = 'Check the KIELER Compiler output channel for details'
                         this.output.appendLine(`[INFO]\t${element.infos.reduce((x, y) => `${x}\n\t\t${y}`)}`)
                     }
                     if (element.warnings && element.warnings.length > 0) {
-                        element.iconPath = new vscode.ThemeIcon('warning')
-                        element.tooltip = 'Check the KIELER Compiler output channel for details'
                         this.output.appendLine(`[WARN]\t${element.warnings.reduce((x, y) => `${x}\n\t\t${y}`)}`)
                     }
                     if (element.errors && element.errors.length > 0) {
-                        element.iconPath = new vscode.ThemeIcon('error')
-                        element.tooltip = 'Check the KIELER Compiler output channel for details'
                         errorString = element.errors.reduce((x, y) => `${x}\n\t\t${y}`)
                         errorOccurred = true
                         this.output.appendLine(`[ERROR]\t${errorString}`)
                     }
                     element.index = index
                     index++
-                    element.command = {
-                        title: `Show snapshot ${element.label} ${element.snapshotIndex}`,
-                        command: SHOW_COMMAND.command,
-                        arguments: [element],
-                    }
-                    this._onDidChangeTreeData.fire(element)
                 })
             })
             this.compilationFinishedEmitter.fire(
                 !errorOccurred && !this.cancellingCompilation && report?.status !== 'stale'
             )
+            await this.presentResult(uri, results, errorOccurred || this.cancellingCompilation)
 
             this.endTime = Date.now()
             // Set finished bar if the currentIndex of the processor is the maxIndex the compilation was not canceled TODO
@@ -693,8 +776,6 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
             this.compilation.text = `$(spinner) ${progress}`
             this.compilation.tooltip = 'Compiling...'
         }
-        // this.compilerWidget.update() TODO it updates since the compilation data of this provider changes somehow
-        this._onDidChangeTreeData.fire()
     }
 
     /**
@@ -784,110 +865,16 @@ export class CompilationDataProvider implements vscode.TreeDataProvider<Snapshot
         //     keybinding: SHOW_PREVIOUS_KEYBINDING
         // })
     }
-
-    // private _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | undefined>()
-    // readonly onDidChangeTreeData = this._onDidChangeTreeData.event
-    private _onDidChangeTreeData: vscode.EventEmitter<SnapshotDescription | undefined | null | void> =
-        new vscode.EventEmitter<SnapshotDescription | undefined | null | void>()
-
-    readonly onDidChangeTreeData: vscode.Event<SnapshotDescription | undefined | null | void> =
-        this._onDidChangeTreeData.event
-
-    getTreeItem(element: SnapshotDescription): vscode.TreeItem | Thenable<vscode.TreeItem> {
-        if (element) {
-            // Put context into element to show it in diagram
-            element.id =
-                element.name +
-                element.index +
-                (!element.contextValue || element.contextValue !== 'parent' ? `:${element.snapshotIndex}` : '')
-            element.label = element.name
-            return element
-        }
-        throw new Error('Method not implemented.')
-    }
-
-    getChildren(element?: SnapshotDescription): vscode.ProviderResult<SnapshotDescription[]> {
-        // TODO somehow show the original model in there too
-        if (this.snapshots) {
-            if (element?.contextValue === 'parent') {
-                let index = -1
-                this.snapshots?.files.find((e) => {
-                    index++
-                    return e[0].index === element.index
-                })
-                return this.snapshots.files[index]
-            }
-            const originalElement = new SnapshotDescription(
-                'Original',
-                '',
-                vscode.TreeItemCollapsibleState.None,
-                'Original',
-                0,
-                -1,
-                [],
-                [],
-                []
-            )
-            originalElement.command = {
-                title: 'Show original ',
-                command: SHOW_COMMAND.command,
-                arguments: [originalElement],
-            }
-            return [originalElement].concat(
-                this.snapshots.files.map((snapshots) => {
-                    if (snapshots.length > 1) {
-                        // TODO calculate or safe what was expanded and what collapsed for each compilation systems, maybe by their name?
-                        const parentElement = new SnapshotDescription(
-                            snapshots[0].name,
-                            '',
-                            vscode.TreeItemCollapsibleState.Collapsed,
-                            snapshots[0].name,
-                            snapshots[0].snapshotIndex,
-                            snapshots[0].index
-                        )
-                        parentElement.contextValue = 'parent'
-                        let error = false
-                        let warn = false
-                        let info = false
-                        snapshots.forEach((snapshot) => {
-                            if (snapshot.infos && snapshot.infos.length > 0) {
-                                info = true
-                            }
-                            if (snapshot.warnings && snapshot.warnings.length > 0) {
-                                warn = true
-                            }
-                            if (snapshot.errors && snapshot.errors.length > 0) {
-                                error = true
-                            }
-                        })
-                        parentElement.iconPath = error
-                            ? new vscode.ThemeIcon('error')
-                            : warn
-                              ? new vscode.ThemeIcon('warning')
-                              : info
-                                ? new vscode.ThemeIcon('info')
-                                : ''
-                        if (info || warn || error) {
-                            parentElement.tooltip = 'Check the KIELER Compiler output channel for details'
-                        }
-                        return parentElement
-                    }
-                    snapshots[0].contextValue = 'snapshot'
-                    return snapshots[0]
-                })
-            )
-        }
-        return []
-    }
 }
 
-export class SnapshotDescription extends vscode.TreeItem {
+/** One compiler stage as sent by the language server, once a tree item and now plain data. */
+export class SnapshotDescription {
     diagnostics?: CompilerIssue[]
 
     constructor(
         public label: string,
-        private version: string,
-        public collapsibleState: vscode.TreeItemCollapsibleState,
+        public version: string,
+        _collapsibleState: unknown,
         name: string,
         snapshotIndex: number,
         index: number,
@@ -895,9 +882,6 @@ export class SnapshotDescription extends vscode.TreeItem {
         warnings?: string[],
         infos?: string[]
     ) {
-        super(label, collapsibleState)
-        this.tooltip = `${this.label}`
-        this.description = this.version
         this.name = name
         this.snapshotIndex = snapshotIndex
         this.index = index

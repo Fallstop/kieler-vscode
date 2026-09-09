@@ -236,9 +236,19 @@ test('unsafe and colliding generated paths are rejected before opening or export
 
 test('the command saves its source, generates targets in order and retains C when Java fails', async () => {
     const source = { uri: URI.file('/model.sctx'), version: 1, isDirty: true }
-    const compiler = { compiling: false, generatingCode: false }
     const calls = []
     const opened = []
+    const compiler = {
+        compiling: false,
+        generatingCode: false,
+        documents: {
+            async open(uri, target, result) {
+                opened.push({ uri, target, result })
+                vscode.window.activeTextEditor = { document: { uri: URI.parse('sccharts-generated:/Demo.c') } }
+            },
+            dispose() {},
+        },
+    }
     const messages = []
     let command
     source.save = async () => {
@@ -269,15 +279,6 @@ test('the command saves its source, generates targets in order and retains C whe
                 calls.push(target)
                 if (target === 'java') throw new Error('C-only host code')
                 return files
-            },
-        },
-        './generated-code-documents': {
-            GeneratedCodeDocuments: class {
-                async open(uri, target, result) {
-                    opened.push({ uri, target, result })
-                    vscode.window.activeTextEditor = { document: { uri: URI.parse('sccharts-generated:/Demo.c') } }
-                }
-                dispose() {}
             },
         },
     })('src/kico/code-generation.ts')

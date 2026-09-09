@@ -106,7 +106,10 @@ async function main() {
         const advisory = timed.issues.filter(issue => issue.code === 'instantaneous-loop')
         assert.ok(advisory.length >= 1, JSON.stringify(timed.issues))
         assert.ok(advisory[0].locations.some(location => location.label === 'x = 0'), JSON.stringify(advisory[0].locations))
-        assert.ok(advisory[0].hint.includes('delayed'))
+        assert.ok(!advisory[0].locations.some(location => /^light = /.test(location.label)), 'Entry actions that merely lie on a timed loop are not listed')
+        assert.equal(advisory[0].message, 'Potential instantaneous loop through the timed transitions on x.')
+        assert.ok(advisory[0].hint.includes('resets x on entry'), advisory[0].hint)
+        assert.ok(advisory[0].details.includes('control flow only'), advisory[0].details)
         assert.ok(!timed.issues.some(issue => issue.code === 'compiler' && issue.message.includes('Instantaneous loop')), 'The bare analyzer message is replaced, not duplicated')
         console.log('Loop analyzer: timed models get a located, explained warning instead of a bare message.')
 

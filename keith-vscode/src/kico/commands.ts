@@ -16,11 +16,15 @@
  */
 
 import * as vscode from 'vscode'
-import { extensionName, views } from '../constants'
 
-export const SHOW_COMMAND: vscode.Command = {
-    command: 'keith-vscode.show',
-    title: 'Show Snapshot',
+export const SHOW_STAGE: vscode.Command = {
+    command: 'keith-vscode.show-stage',
+    title: 'Show Compilation Stage...',
+}
+
+export const SHOW_MODEL: vscode.Command = {
+    command: 'keith-vscode.show-model',
+    title: 'Show Model in Diagram',
 }
 
 export const COMPILE_COMMAND: vscode.Command = {
@@ -68,29 +72,4 @@ export const TOGGLE_PRIVATE_SYSTEMS: vscode.Command = {
 export const TOGGLE_AUTO_COMPILE: vscode.Command = {
     command: 'keith-vscode.auto-compile',
     title: 'Toggle auto compile',
-}
-
-export const TOGGLE_BUTTON_MODE: vscode.Command = {
-    command: 'keith-vscode.button-mode',
-    title: 'Toggle button mode',
-}
-
-/**
- * Utility commands for focussing different views of the extension.
- * They are provided by default in the command palette, since VSCode automatically retrieves provided views from package.json.
- */
-
-export const REVEAL_COMPILATION_WIDGET: vscode.Command = {
-    command: `${views.compiler.id}.focus`,
-    title: `Focus on ${views.compiler.name} View`,
-}
-
-export const REVEAL_SIMULATION_WIDGET: vscode.Command = {
-    command: `${views.simulation.id}.focus`,
-    title: `Focus on ${views.simulation.name} View`,
-}
-
-export const OPEN_KIELER_VIEW: vscode.Command = {
-    command: `workbench.view.extension.${extensionName}`,
-    title: 'Show KIELER',
 }

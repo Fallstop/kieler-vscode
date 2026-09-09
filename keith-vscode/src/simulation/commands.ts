@@ -23,6 +23,14 @@ export const SIMULATE: vscode.Command = {
     title: 'Restart simulation',
 }
 
+/**
+ * Command to compile the model again with the running simulation's system and start over.
+ */
+export const REBUILD_SIMULATION: vscode.Command = {
+    command: 'keith-vscode.simulation-rebuild',
+    title: 'Rebuild and Restart Simulation',
+}
+
 export const COMPILE_AND_SIMULATE: vscode.Command = {
     command: 'keith-vscode.simulate',
     title: 'Simulate',

@@ -209,6 +209,46 @@ body .sidebar {
     color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
 }
 
+.kv-btn-quiet {
+    color: var(--kv-muted);
+}
+
+.kv-btn-quiet:hover:not(:disabled) {
+    color: var(--vscode-foreground);
+}
+
+/* The running simulation no longer matches the model text; a warm tint says "rebuild me". */
+.kv-btn-stale {
+    background: var(--vscode-inputValidation-warningBackground, rgba(209, 134, 22, 0.2));
+    border-color: var(--vscode-inputValidation-warningBorder, var(--kv-queued));
+}
+
+.kv-btn-stale .kv-btn-label {
+    display: inline;
+}
+
+/* ---- Compiler stage instead of the model ---- */
+
+.kv-stage-name {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kv-stage-label {
+    color: var(--kv-muted);
+    text-transform: uppercase;
+    font-size: 0.8em;
+    letter-spacing: 0.06em;
+}
+
+.kv-stage-value {
+    font-weight: 600;
+}
+
 .kv-status,
 .kv-error {
     display: inline-flex;

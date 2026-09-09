@@ -21,7 +21,11 @@ each target method signature and fails the build if a server update changes it:
   Equal strings are reused per model slot; distinct values stay alive until simulation
   exit because other model variables or host C can retain their pointers across ticks.
 - Loop analyzer completion: attach the critical nodes' source locations and an explanation
-  to the bare "Instantaneous loop detected!" message.
+  to the bare "Instantaneous loop detected!" message. A loop through the timed-automata
+  expansion (`sleepT` updates and timeout checks of a clock) is reported as a loop through the
+  timed transitions on that clock: the message names the clock as written in the model, lists
+  the timed transitions (from the source model when the transformed nodes carry no trace) and
+  the clock resets, and drops unrelated entry actions that merely lie on the path.
 - Compiler completion: include in-memory C/Java source files in the final result. Generation
   validates the saved source and host-language implementations before exposing files. Failures
   become structured diagnostics on the existing code-generation stage; no files are written.

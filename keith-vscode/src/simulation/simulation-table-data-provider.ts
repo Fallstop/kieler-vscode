@@ -15,7 +15,6 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-import { TableWebview } from '@kieler/table-webview/lib/table-webview'
 import * as path from 'path'
 import * as vscode from 'vscode'
 import { LanguageClient, State } from 'vscode-languageclient/node'
@@ -35,6 +34,7 @@ import {
     NEW_VALUE_SIMULATION,
     OPEN_EXTERNAL_KVIZ_VIEW,
     PAUSE_SIMULATION,
+    REBUILD_SIMULATION,
     RUN_SIMULATION,
     SAVE_TRACE,
     SET_SIMULATION_STEP_DELAY,
@@ -72,7 +72,7 @@ export const startedSimulationMessageType = 'keith/simulation/started'
 /** Workspace-state key remembering the Δt a user last set, reused when the next simulation starts. */
 const DELTA_T_KEY = 'keith.simulation.deltaT'
 
-export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
+export class SimulationTableDataProvider {
     public readonly newSimulationDataEmitter = new vscode.EventEmitter<this>()
 
     public readonly newSimulationData: vscode.Event<this> = this.newSimulationDataEmitter.event
@@ -177,8 +177,6 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
 
     endTime = 0
 
-    public static readonly viewType = 'kieler-simulation-table'
-
     public kico: CompilationDataProvider
 
     private lsClient: LanguageClient
@@ -189,11 +187,16 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
 
     private simulationStatus: vscode.StatusBarItem
 
-    protected table: TableWebview
-
-    protected view: vscode.WebviewView | undefined
-
     protected disposables: vscode.Disposable[] = []
+
+    /** Text of the model when it was compiled for the running simulation, to notice later edits. */
+    private compiledText: string | undefined
+
+    /** The simulation system the running simulation was built with, so a rebuild needs no prompt. */
+    private lastSystem: { id: string; snapshot: boolean } | undefined
+
+    /** The model was edited after the running simulation was built. */
+    public stale = false
 
     constructor(
         lsClient: LanguageClient,
@@ -236,6 +239,9 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
                 // Else case is not important enough to alert the user
             })
         )
+        this.disposables.push(
+            vscode.workspace.onDidChangeTextDocument((event) => this.onDidChangeModelText(event.document))
+        )
         // Bind to LSP messages
         this.disposables.push(
             lsClient.onDidChangeState((event) => {
@@ -260,6 +266,9 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.context.subscriptions.push(
             vscode.commands.registerCommand(SIMULATE.command, async () => {
                 await this.restartSimulation()
+            }),
+            vscode.commands.registerCommand(REBUILD_SIMULATION.command, async () => {
+                await this.rebuildSimulation()
             })
         )
 
@@ -387,36 +396,6 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         )
     }
 
-    resolveWebviewView(webviewView: vscode.WebviewView): void | Thenable<void> {
-        // Initialize webview
-        const tWebview = new TableWebview(
-            'KIELER Simulation',
-            [this.getExtensionFileUri('dist')],
-            this.getExtensionFileUri('dist', 'simulation-webview.js')
-        )
-        tWebview.webview = webviewView.webview
-        tWebview.webview.options = {
-            enableScripts: true,
-        }
-        const title = tWebview.getTitle()
-        webviewView.title = title
-        tWebview.initializeWebview(webviewView.webview, title, ['Name', 'Input', 'Value', 'History'])
-        this.table = tWebview
-        this.view = webviewView
-
-        // Subscriptions
-        this.context.subscriptions.push(
-            this.table.cellClicked((cell: { rowId: string; columnId: string } | undefined) => {
-                if (cell && cell.rowId && cell.columnId === 'Input') {
-                    this.clickedRow(cell.rowId)
-                }
-            })
-        )
-        this.table.initialized(() => {
-            this.initializeTable()
-        })
-    }
-
     clickedRow(rowId: string): void {
         const data = this.simulationData.get(rowId)
         if (!data || !data.input) {
@@ -447,18 +426,76 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
             return
         this.valuesForNextStep.set(simulationData.id, value)
         this.changedValuesForNextStep.set(simulationData.id, value)
-        this.table?.updateCell(simulationData.id, 'Input', this.inputCell(simulationData))
         this.onDidChangeViewStateEmitter.fire()
     }
 
-    /** Stops the running simulation, if any, and starts it again from tick 0 with the same compiled model. */
+    /**
+     * Starts the simulation again from tick 0. With the model unchanged the compiled model is reused;
+     * after an edit it is rebuilt first, since restarting stale code is never what the author wants.
+     */
     async restartSimulation(): Promise<void> {
         if (this.phase === 'starting' || this.phase === 'stopping') return
+        if (this.stale && this.lastSystem) {
+            await this.rebuildSimulation()
+            return
+        }
         const uri = this.modelUri ?? this.kico.lastCompiledUri
         if (this.simulationRunning) {
             if (!(await this.stopSimulation())) return
         }
         await this.simulate(uri)
+    }
+
+    /**
+     * Compiles the current model with the simulation system of the running (or last) simulation and
+     * starts over. Falls back to the system prompt when nothing was built yet.
+     */
+    async rebuildSimulation(): Promise<boolean> {
+        if (this.pickingSystem || this.phase === 'starting' || this.phase === 'stopping' || this.kico.compiling)
+            return false
+        const uri = this.modelUri ?? this.kico.lastCompiledUri
+        const system = this.lastSystem
+        if (!uri || !system) return this.compileAndSimulate(false, uri ? vscode.Uri.parse(uri) : undefined)
+        this.pickingSystem = true
+        try {
+            if (this.simulationRunning && !(await this.stopSimulation())) return false
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))
+            const { generation } = this
+            if (document.isDirty && !(await document.save())) throw new Error('The model could not be saved.')
+            if (generation !== this.generation) return false
+            await this.startBuild(document, system.id, system.snapshot)
+            return true
+        } catch (error) {
+            this.fail(`The simulation could not be rebuilt: ${error}`)
+            return false
+        } finally {
+            this.pickingSystem = false
+        }
+    }
+
+    /** Compiles the saved model for simulation; the compilation-finished event starts the run. */
+    private async startBuild(document: vscode.TextDocument, systemId: string, snapshot: boolean): Promise<void> {
+        this.lastError = undefined
+        this.modelUri = document.uri.toString()
+        this.compiledText = document.getText()
+        this.lastSystem = { id: systemId, snapshot }
+        this.setStale(false)
+        this.compilingSimulation = true
+        this.setPhase('starting')
+        await this.kico.compile(systemId, true, false, snapshot, this.modelUri)
+    }
+
+    private setStale(stale: boolean): void {
+        if (this.stale === stale) return
+        this.stale = stale
+        this.onDidChangeViewStateEmitter.fire()
+    }
+
+    /** An edit to the simulated model marks the running simulation as built from an older version. */
+    private onDidChangeModelText(document: vscode.TextDocument): void {
+        if (!this.modelUri || document.uri.toString() !== vscode.Uri.parse(this.modelUri).toString()) return
+        if (this.compiledText === undefined) return
+        this.setStale(document.getText() !== this.compiledText)
     }
 
     private setPhase(phase: SimulationPhase): void {
@@ -486,9 +523,10 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.compilingSimulation = false
         this.stopRequest = undefined
         this.modelUri = undefined
+        this.compiledText = undefined
+        this.stale = false
         this.lastError = undefined
         this.simulationStep = -1
-        this.table?.reset()
         this.updateTickIndicators()
         this.simulationStatus.hide()
         this.setPhase('idle')
@@ -498,7 +536,6 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.stepper.reset()
         clearTimeout(this.startTimer)
         this.disposables.forEach((d) => d.dispose())
-        this.table?.dispose()
         this.output.dispose()
         this.onDidChangeViewStateEmitter.dispose()
         this.newSimulationDataEmitter.dispose()
@@ -549,11 +586,7 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
             if (editor.document.isDirty && !(await editor.document.save()))
                 throw new Error('The model could not be saved.')
             if (preparedGeneration !== this.generation) return false
-            this.lastError = undefined
-            this.modelUri = editor.document.uri.toString()
-            this.compilingSimulation = true
-            this.setPhase('starting')
-            await this.kico.compile(selected.system.id, true, false, snapshot, this.modelUri)
+            await this.startBuild(editor.document, selected.system.id, snapshot)
             return true
         } catch (error) {
             this.fail(`The simulation could not be prepared: ${error}`)
@@ -778,9 +811,6 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
      * Shows the current tick in the view description and the status bar.
      */
     updateTickIndicators(): void {
-        if (this.view) {
-            this.view.description = this.phase === 'running' ? `tick ${this.simulationStep}` : undefined
-        }
         if (this.phase === 'running') {
             this.simulationStatus.text = `$(debug-step-over) Tick ${this.simulationStep}`
             this.simulationStatus.tooltip = 'Execute simulation step'
@@ -829,7 +859,6 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
                 this.setValuesToStopSimulation()
                 this.simulationStatus.text = 'Stopped simulation'
                 this.simulationStatus.tooltip = ''
-                this.table?.reset()
                 return true
             } catch (error) {
                 if (generation === this.generation) this.fail(`The simulation could not be stopped: ${error}`)
@@ -854,7 +883,6 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         this.changedValuesForNextStep.clear()
         this.simulationData.clear()
         this.simulationStep = -1
-        this.table?.reset()
         // this.simulationTreeData = []
         this.play = false
         vscode.commands.executeCommand('setContext', 'keith.vscode:play', this.play)
@@ -1063,70 +1091,13 @@ export class SimulationTableDataProvider implements vscode.WebviewViewProvider {
         )
     }
 
-    nameCell(entry: SimulationData): { cssClass: string; value: string } {
-        let kind = ''
-        if (entry.input) {
-            kind = 'in'
-        } else if (entry.output) {
-            kind = 'out'
-        }
-        return {
-            cssClass: 'simulation-table-label',
-            value: JSON.stringify({ name: entry.label, kind, categories: entry.categories }),
-        }
-    }
-
-    inputCell(entry: SimulationData): { cssClass: string; value: string } {
-        if (!entry.input) {
-            return { cssClass: 'simulation-table-cell', value: '' }
-        }
-        const pending = this.changedValuesForNextStep.has(entry.id)
-        return {
-            cssClass: pending ? 'simulation-table-input-pending' : 'simulation-table-input',
-            value: JSON.stringify(this.valuesForNextStep.get(entry.id)),
-        }
-    }
-
-    valueCell(entry: SimulationData): { cssClass: string; value: string } {
-        const latest = entry.data.length > 0 ? entry.data[entry.data.length - 1] : undefined
-        return {
-            cssClass: 'simulation-table-value',
-            value: latest === undefined ? '' : JSON.stringify(latest),
-        }
-    }
-
-    historyCell(entry: SimulationData): { cssClass: string; value: string } {
-        return { cssClass: 'simulation-table-history', value: JSON.stringify(entry.data) }
-    }
-
+    /** Rebuilds what the preview shows after the variable set or a display setting changed. */
     initializeTable() {
-        // The sidebar table only exists once that view has been opened.
-        this.table?.reset()
-        this.simulationData.forEach((entry) => {
-            if (this.isVisible(entry) && this.table) {
-                this.table.addRow(
-                    entry.id,
-                    this.nameCell(entry),
-                    this.inputCell(entry),
-                    this.valueCell(entry),
-                    this.historyCell(entry)
-                )
-            }
-        })
         this.update()
     }
 
     update(): void {
         this.updateTickIndicators()
-        if (this.simulationRunning && this.table) {
-            this.simulationData.forEach((entry) => {
-                if (this.isVisible(entry)) {
-                    this.table.updateCell(entry.id, 'Input', this.inputCell(entry))
-                    this.table.updateCell(entry.id, 'Value', this.valueCell(entry))
-                    this.table.updateCell(entry.id, 'History', this.historyCell(entry))
-                }
-            })
-        }
         this.onDidChangeViewStateEmitter.fire()
     }
 }

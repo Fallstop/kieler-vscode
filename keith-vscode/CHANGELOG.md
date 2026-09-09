@@ -6,6 +6,28 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-09
+
+- The KIELER sidebar (compiler tree, model checker, simulation table) is gone, and with it the
+  broken activity bar icon. Compiler stages are browsed with **Show Compilation Stage...**
+  (**Stages** above the preview, the editor title menu, or the Command Palette). The model
+  checker and the STPA import that fed it are removed.
+- Compiling with a code-producing system opens the generated C or Java as read-only editor
+  tabs, like **Generate Code**, instead of drawing the code in the diagram. When a stage is
+  shown, a **Model** button above the preview returns to the SCChart; a finished compilation
+  also brings the diagram back to the model. Clicking the code view no longer sends an
+  Eclipse-only action to the language server, which threw a `NullPointerException` at the
+  user; it opens the generated files instead.
+- **Generate Code** is discoverable: an icon in the editor title of `.sctx` files and a **Code**
+  button above the preview.
+- Editing the simulated model marks the running simulation as stale and turns **Restart** into
+  **Rebuild**, which compiles the model again with the same simulation system before starting
+  over. Unsaved edits are saved first.
+- Instantaneous-loop warnings on timed transitions now say so: the warning names the clock and
+  lists the timed transitions instead of the unrelated entry actions on the path, and explains
+  that the compiler checks each timeout in the tick the state is entered, why a clock reset on
+  entry makes the loop advisory, and when it is not.
+
 ## [0.6.0] - 2026-09-08
 
 - Generate C, Java, or both from SCCharts into read-only virtual code tabs. Save individual

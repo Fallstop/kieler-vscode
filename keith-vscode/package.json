@@ -2,7 +2,7 @@
   "name": "sccharts-lab",
   "displayName": "SCCharts Lab",
   "description": "Edit, visualise, simulate tick by tick, and debug SCCharts models in VS Code. Independent fork of the KIELER VS Code extension (keith-vscode).",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "qinnovate",
   "author": "Jasper Miller-Waugh",
   "contributors": [
@@ -33,7 +33,6 @@
     "simulation"
   ],
   "activationEvents": [
-    "onView:kieler",
     "onLanguage:sctx",
     "onLanguage:scl",
     "onLanguage:elkt",
@@ -185,11 +184,6 @@
     ],
     "commands": [
       {
-        "command": "keith-vscode.import-stpa-ltl",
-        "title": "Import LTL from STPA",
-        "category": "STPA"
-      },
-      {
         "command": "keith-vscode.compile",
         "title": "Compile current model with...",
         "icon": "$(server-process)",
@@ -202,10 +196,14 @@
         "category": "KiCo"
       },
       {
-        "command": "keith-vscode.show",
-        "title": "Show snapshot...",
-        "icon": "$(eye)",
-        "category": "KiCo"
+        "command": "keith-vscode.show-stage",
+        "title": "Show Compilation Stage...",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "keith-vscode.show-model",
+        "title": "Show Model in Diagram",
+        "icon": "$(arrow-left)"
       },
       {
         "command": "keith-vscode.auto-compile",
@@ -225,11 +223,6 @@
       {
         "command": "keith-vscode.inplace",
         "title": "Set inplace compilation to ...",
-        "category": "KiCo"
-      },
-      {
-        "command": "keith-vscode.button-mode",
-        "title": "Show buttons in compilation widget ...",
         "category": "KiCo"
       },
       {
@@ -271,11 +264,6 @@
         "icon": "$(preview)"
       },
       {
-        "command": "keith-vscode.add-co-simulation",
-        "title": "Add Co-Simulation",
-        "category": "Simulation"
-      },
-      {
         "command": "keith-vscode.simulation-stop",
         "title": "Stop simulation",
         "category": "Simulation",
@@ -306,9 +294,9 @@
         "icon": "$(debug-restart)"
       },
       {
-        "command": "keith-vscode.simulation-new-value",
-        "title": "New value for ...",
-        "category": "Simulation"
+        "command": "keith-vscode.simulation-rebuild",
+        "title": "Rebuild and Restart Simulation",
+        "icon": "$(sync)"
       },
       {
         "command": "keith-vscode.simulation-save-trace",
@@ -334,24 +322,6 @@
         "command": "keith-vscode.show-internal-variables",
         "title": "Set display internal variables to ...",
         "category": "Simulation"
-      },
-      {
-        "command": "keith-vscode.verification-load-properties",
-        "title": "Reload Properties",
-        "category": "Verificaiton",
-        "icon": "$(repo-sync)"
-      },
-      {
-        "command": "keith-vscode.verification-run-checker",
-        "title": "Start Verification",
-        "category": "Verification",
-        "icon": "$(debug-start)"
-      },
-      {
-        "command": "keith-vscode.verification-run-counterexample",
-        "title": "Start Counterexample",
-        "category": "Verification",
-        "icon": "$(debug-alt)"
       },
       {
         "command": "keith-vscode.restart-language-server",
@@ -444,25 +414,7 @@
       }
     ],
     "menus": {
-      "view/item/context": [
-        {
-          "when": "viewItem == snapshot",
-          "command": "keith-vscode.show"
-        },
-        {
-          "when": "viewItem == simulation:data:input || viewItem == simulation:history:input",
-          "command": "keith-vscode.simulation-new-value"
-        }
-      ],
       "commandPalette": [
-        {
-          "command": "keith-vscode.import-stpa-ltl",
-          "when": "resourceLangId == sctx"
-        },
-        {
-          "command": "keith-vscode.show",
-          "when": "false"
-        },
         {
           "when": "keith.vscode:compilationReady && resourceLangId in keith-vscode.languages",
           "command": "keith-vscode.compile"
@@ -470,6 +422,14 @@
         {
           "when": "keith.vscode:compilationReady && resourceLangId in keith-vscode.languages",
           "command": "keith-vscode.compile-snapshot"
+        },
+        {
+          "when": "keith.vscode:compilationReady && resourceLangId in keith-vscode.languages",
+          "command": "keith-vscode.show-stage"
+        },
+        {
+          "when": "keith-vscode.diagramOpen",
+          "command": "keith-vscode.show-model"
         },
         {
           "command": "keith-vscode.auto-compile"
@@ -504,10 +464,6 @@
           "command": "keith-vscode.simulate-snapshot"
         },
         {
-          "command": "keith-vscode.simulation-new-value",
-          "when": "false"
-        },
-        {
           "command": "keith-vscode.simulation-stop",
           "when": "keith.vscode:simulationRunning"
         },
@@ -528,6 +484,10 @@
           "when": "!keith.vscode:simulationRunning"
         },
         {
+          "command": "keith-vscode.simulation-rebuild",
+          "when": "keith.vscode:simulationRunning"
+        },
+        {
           "command": "keith-vscode.simulation-save-trace",
           "when": "keith.vscode:simulationRunning"
         },
@@ -538,15 +498,6 @@
         {
           "command": "keith-vscode.open-kviz-external",
           "when": "keith.vscode:simulationRunning"
-        },
-        {
-          "command": "keith-vscode.verification-load-properties"
-        },
-        {
-          "command": "keith-vscode.verification-run-checker"
-        },
-        {
-          "command": "keith-vscode.verification-run-counterexample"
         },
         {
           "command": "keith-vscode.restart-language-server"
@@ -618,6 +569,11 @@
           "group": "navigation@1"
         },
         {
+          "when": "keith.vscode:compilationReady && resourceLangId in keith-vscode.languages",
+          "command": "keith-vscode.show-stage",
+          "group": "2_codegen@2"
+        },
+        {
           "command": "keith-vscode.simulation-step",
           "when": "keith.vscode:simulationRunning && (keith-diagram-focused || resourceLangId == sctx)",
           "group": "navigation@11"
@@ -670,7 +626,7 @@
         {
           "command": "keith-vscode.generate-code",
           "when": "resourceLangId == sctx && resourceScheme == file",
-          "group": "2_codegen@1"
+          "group": "navigation@3"
         },
         {
           "command": "keith-vscode.save-generated-code",
@@ -681,17 +637,22 @@
           "command": "keith-vscode.save-all-generated-code",
           "when": "resourceScheme == sccharts-generated",
           "group": "navigation@2"
+        },
+        {
+          "when": "keith-diagram-focused",
+          "command": "keith-vscode.restart-language-server",
+          "group": "9_restart"
+        },
+        {
+          "when": "keith-diagram-focused",
+          "command": "keith-vscode.show-stage",
+          "group": "2_diagram-controls@3"
         }
       ],
       "editor/context": [
         {
           "when": "resourceLangId in keith-vscode.languages",
           "command": "keith-vscode.diagram.open",
-          "group": "navigation"
-        },
-        {
-          "command": "keith-vscode.import-stpa-ltl",
-          "when": "resourceLangId == sctx",
           "group": "navigation"
         }
       ],
@@ -706,110 +667,10 @@
           "when": "resourceExtname == .sctx && resourceScheme == file",
           "group": "2_codegen"
         }
-      ],
-      "view/title": [
-        {
-          "command": "keith-vscode.simulation-step",
-          "when": "keith.vscode:simulationRunning && view == kieler-simulation-table",
-          "group": "navigation@1"
-        },
-        {
-          "command": "keith-vscode.simulation-stop",
-          "when": "keith.vscode:simulationRunning && view == kieler-simulation-table",
-          "group": "navigation@3"
-        },
-        {
-          "command": "keith-vscode.simulation-run",
-          "when": "keith.vscode:simulationRunning && !keith.vscode:play && view == kieler-simulation-table",
-          "group": "navigation@2"
-        },
-        {
-          "command": "keith-vscode.simulation-pause",
-          "when": "keith.vscode:simulationRunning && keith.vscode:play && view == kieler-simulation-table",
-          "group": "navigation@2"
-        },
-        {
-          "command": "keith-vscode.open-kviz-external",
-          "when": "view == kieler-simulation-table",
-          "group": "1_simulation-visualization"
-        },
-        {
-          "command": "keith-vscode.simulation-save-trace",
-          "when": "view == kieler-simulation-table",
-          "group": "2_simulation-trace@1"
-        },
-        {
-          "command": "keith-vscode.simulation-load-trace",
-          "when": "view == kieler-simulation-table",
-          "group": "2_simulation-trace@2"
-        },
-        {
-          "command": "keith-vscode.simulation-restart",
-          "when": "!keith.vscode:simulationRunning && view == kieler-simulation-table",
-          "group": "navigation@2"
-        },
-        {
-          "command": "keith-vscode.verification-load-properties",
-          "when": "view == kieler-model-checker",
-          "group": "navigation@1"
-        },
-        {
-          "command": "keith-vscode.verification-run-checker",
-          "when": "view == kieler-model-checker",
-          "group": "navigation@2"
-        },
-        {
-          "command": "keith-vscode.verification-run-counterexample",
-          "when": "view == kieler-model-checker",
-          "group": "navigation@3"
-        },
-        {
-          "command": "keith-vscode.restart-language-server",
-          "when": "view == kieler-kico",
-          "group": "navigation@9"
-        },
-        {
-          "command": "keith-vscode.restart-language-server",
-          "when": "view == kieler-model-checker",
-          "group": "9_restart"
-        },
-        {
-          "command": "keith-vscode.restart-language-server",
-          "when": "view == kieler-simulation-table",
-          "group": "9_restart"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "kieler",
-          "title": "KIELER",
-          "icon": "./icon.png"
-        }
-      ]
-    },
-    "views": {
-      "kieler": [
-        {
-          "type": "tree",
-          "id": "kieler-kico",
-          "name": "KIELER Compiler"
-        },
-        {
-          "type": "webview",
-          "id": "kieler-model-checker",
-          "name": "KIELER Model Checker"
-        },
-        {
-          "type": "webview",
-          "id": "kieler-simulation-table",
-          "name": "KIELER Simulation"
-        }
       ]
     },
     "configuration": {
-      "title": "KIELER",
+      "title": "SCCharts Lab",
       "properties": {
         "keith-vscode.autocompile.enabled": {
           "type": "boolean",
@@ -826,25 +687,10 @@
           "default": true,
           "description": "Specifies whether the model of the compilation shall be shown after compilation."
         },
-        "keith-vscode.showButtons.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Specifies whether buttons in the compilation widget shall be shown."
-        },
         "keith-vscode.showPrivateSystems.enabled": {
           "type": "boolean",
           "default": false,
           "description": "Specifies whether private compilation systems shall be shown."
-        },
-        "keith-vscode.displayInOut.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Specifies whether the input/output column is added to the table in the simulation widget."
-        },
-        "keith-vscode.inputOutputColumn.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Indicates whether the input/output column should be displayed."
         },
         "keith-vscode.simulationStepDelay": {
           "type": "integer",
@@ -945,7 +791,6 @@
   },
   "dependencies": {
     "@kieler/klighd-core": "^0.8.1",
-    "@kieler/table-webview": "^0.0.9",
     "es6-shim": "^0.35.8",
     "inversify": "^6.0.2",
     "nanoid": "^3.1.23",

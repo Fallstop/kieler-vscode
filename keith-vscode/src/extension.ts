@@ -27,8 +27,6 @@ import { REQUEST_CS } from './kico/commands'
 import { CompilationDataProvider } from './kico/compilation-data-provider'
 import { DiagnosticBridge } from './kico/diagnostic-bridge'
 import { registerCodeGeneration } from './kico/code-generation'
-import { ModelCheckerDataProvider } from './model-checker/model-checker-data-provider'
-import { registerStpaCommands } from './pasta/stpa-interaction'
 import { handlePerformAction, PerformActionAction, performActionKind } from './perform-action-handler'
 import { SettingsService } from './settings'
 import { RESTART_LANGUAGE_SERVER } from './simulation/commands'
@@ -127,7 +125,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (await reportConflictingExtensions()) {
         return
     }
-    registerStpaCommands(context)
 
     // Create context key of supported languages
     vscode.commands.executeCommand('setContext', 'keith-vscode.languages', supportedFileEndings)
@@ -153,14 +150,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // Diagrams are part of this extension now (merged from klighd-vscode), so no other
     // extension has to be handed the language client.
     const diagrams = new DiagramController(context, lsClient, supportedFileEndings)
-    diagrams.addActionHandler(performActionKind, (action) => handlePerformAction(action as PerformActionAction))
 
     // create SettingsService with list of setting-keys to manage
     settingsService = new SettingsService<Settings>(settingsKey, [
         'autocompile.enabled',
         'compileInplace.enabled',
         'showResultingModel.enabled',
-        'showButtons.enabled',
         'showPrivateSystems.enabled',
         'simulationStepDelay',
         'simulationType',
@@ -176,42 +171,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             compilationDataProvider.show(uri, index)
         )
     )
-
-    // Register and start kico view
+    // Clicking the code view's text asks for an Eclipse editor; the generated code opens as tabs instead.
+    diagrams.addActionHandler(performActionKind, (action) => {
+        const uri = diagrams.currentUri
+        const stage = compilationDataProvider.currentStage(uri?.toString())
+        const target = stage && /java/i.test(stage.name) ? 'java' : 'c'
+        return handlePerformAction(action as PerformActionAction, uri, target)
+    })
+    // Reopening or restarting the diagram synthesizes the source model again, so no stage is shown any more.
     context.subscriptions.push(
-        vscode.window.createTreeView('kieler-kico', {
-            treeDataProvider: compilationDataProvider,
-        })
+        diagrams.onDidChangeDiagram(() => compilationDataProvider.diagramReset(diagrams.currentUri?.toString()))
     )
 
-    // Register and start simulation table view
+    // The simulation lives in the diagram preview tab: controls above the diagram, the tick-by-tick trace below.
     const simulationDataProvider: SimulationTableDataProvider = new SimulationTableDataProvider(
         lsClient,
         compilationDataProvider,
         context,
         settingsService
     )
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider('kieler-simulation-table', simulationDataProvider)
-    )
-    // The diagram preview tab carries the simulation controls and the tick-by-tick trace.
     context.subscriptions.push(new SimulationViewBridge(simulationDataProvider, diagrams, settingsService))
 
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_LANGUAGE_SERVER.command, () =>
             restartLanguageServer(simulationDataProvider)
         )
-    )
-
-    // Register and start model checker view
-    const modelCheckerDataProvider: vscode.WebviewViewProvider = new ModelCheckerDataProvider(
-        lsClient,
-        compilationDataProvider,
-        context,
-        simulationDataProvider
-    )
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider('kieler-model-checker', modelCheckerDataProvider)
     )
 
     // After a restart (manual or automatic) the compiler panel must learn the fresh server's systems.

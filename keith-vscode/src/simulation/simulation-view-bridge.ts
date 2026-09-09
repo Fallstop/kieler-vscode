@@ -19,6 +19,8 @@ import * as path from 'path'
 import * as vscode from 'vscode'
 import { Settings, settingsKey } from '../constants'
 import { DiagramController } from '../diagram/diagram-controller'
+import { GENERATE_CODE } from '../kico/code-generation'
+import { SHOW_MODEL, SHOW_STAGE } from '../kico/commands'
 import { SettingsService } from '../settings'
 import {
     COMPILE_AND_SIMULATE,
@@ -63,6 +65,7 @@ export class SimulationViewBridge implements vscode.Disposable {
         )
         this.disposables.push(simulation.onDidChangeViewState(() => this.push()))
         this.disposables.push(diagrams.onDidChangeDiagram(() => this.push()))
+        this.disposables.push(simulation.kico.onDidChangeStage(() => this.push()))
         // The settings cache refreshes in an earlier listener, so the values are current here.
         this.disposables.push(
             vscode.workspace.onDidChangeConfiguration((event) => {
@@ -85,10 +88,17 @@ export class SimulationViewBridge implements vscode.Disposable {
 
     private async handle(command: SimulationViewRequest): Promise<void> {
         if (!command || typeof command.kind !== 'string') return
-        if (!['requestState', 'setStepDelay', 'setShowInternal'].includes(command.kind)) {
+        const diagramCommands = ['showModel', 'showStage', 'generateCode']
+        if (!['requestState', 'setStepDelay', 'setShowInternal', ...diagramCommands].includes(command.kind)) {
             const state = this.viewState()
             const canHandle = command.kind === 'start' ? state.canStart : state.phase === 'running'
             if (!command.modelUri || command.modelUri !== state.modelUri || !canHandle) {
+                this.push()
+                return
+            }
+        } else if (diagramCommands.includes(command.kind)) {
+            // These act on whatever the preview shows, which must still be the model the button was pressed for.
+            if (!command.modelUri || command.modelUri !== this.diagrams.currentUri?.toString()) {
                 this.push()
                 return
             }
@@ -99,6 +109,18 @@ export class SimulationViewBridge implements vscode.Disposable {
                 break
             case 'start':
                 await vscode.commands.executeCommand(COMPILE_AND_SIMULATE.command, this.diagrams.currentUri)
+                break
+            case 'rebuild':
+                await this.simulation.rebuildSimulation()
+                break
+            case 'showModel':
+                await vscode.commands.executeCommand(SHOW_MODEL.command, this.diagrams.currentUri)
+                break
+            case 'showStage':
+                await vscode.commands.executeCommand(SHOW_STAGE.command, this.diagrams.currentUri)
+                break
+            case 'generateCode':
+                await vscode.commands.executeCommand(GENERATE_CODE, this.diagrams.currentUri)
                 break
             case 'step':
                 await vscode.commands.executeCommand(STEP_SIMULATION.command)
@@ -163,6 +185,7 @@ export class SimulationViewBridge implements vscode.Disposable {
                 variables.push(this.variableState(entry, tick, firstTick))
             }
         })
+        const shown = sim.kico.currentStage(modelUri)
         return {
             phase: matches ? sim.phase : 'idle',
             canStart: !!uri && sim.phase !== 'starting' && sim.phase !== 'stopping',
@@ -175,6 +198,9 @@ export class SimulationViewBridge implements vscode.Disposable {
             model: uri ? path.basename(uri.path) : undefined,
             variables,
             error: matches ? sim.lastError : undefined,
+            stale: matches && sim.stale,
+            stage: shown ? { name: shown.name, position: shown.index + 1, count: shown.count } : undefined,
+            canGenerate: !!uri && uri.scheme === 'file' && uri.path.endsWith('.sctx'),
         }
     }
 

@@ -150,7 +150,8 @@ export class CompilerDiagnostics implements vscode.Disposable {
                         issue.message = `Circular dependency involving ${[...symbols].join(
                             ', '
                         )} prevents scheduling this tick.`
-                    if (issue.code === 'instantaneous-loop')
+                    // The server names the clocks of a timed loop itself; only its generic message is rephrased.
+                    if (issue.code === 'instantaneous-loop' && !/^Potential instantaneous loop/.test(issue.message))
                         issue.message = symbols.size
                             ? `Potential instantaneous loop through ${[...symbols].join(', ')}.`
                             : 'Potential instantaneous loop.'

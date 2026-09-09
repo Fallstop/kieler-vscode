@@ -26,7 +26,9 @@ function setup(t) {
         onDidChangeViewState: changed.subscribe,
         isBlacklisted: () => false, isInternal: () => false,
         restartSimulation: async () => executed.push(['restart']),
+        rebuildSimulation: async () => executed.push(['rebuild']),
         setInputValue: () => executed.push(['setInput']),
+        kico: { onDidChangeStage: changed.subscribe, currentStage: () => undefined },
     }
     const diagrams = {
         currentUri: URI.parse(first),
