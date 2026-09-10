@@ -88,7 +88,7 @@ async function main() {
         assert.equal(outputs(incompatible).length, 0)
         assert.match(errors(incompatible).join('\n'), /hostcode-c.*hostcode-java/)
         const diagnostic = incompatible.results.files.flat().flatMap(stage => stage.diagnostics).find(issue => issue.code === 'code-generation')
-        assert.equal(diagnostic.locations[0].uri, incompatible.uri)
+        assert.ok(sameFile(diagnostic.locations[0].uri, incompatible.uri), diagnostic.locations[0].uri)
         assert.equal(diagnostic.locations[0].offset, 0)
 
         const dualHost = '#hostcode-java "// Java implementation"\n' + cOnly
