@@ -3,6 +3,7 @@
 //   SCCHARTS_SERVER_DIR  directory holding sccharts-lite-server.jar (default: ../server)
 //   SCCHARTS_JAVA        java launcher for the server process (default: java from PATH).
 //                        Point it at server/jre/bin/java to test the bundled runtime image.
+const fs = require('node:fs')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 
@@ -15,7 +16,9 @@ const serverArgs = ['-Djava.awt.headless=true', '-cp', classpath, 'de.cau.cs.kie
 function sameFile(serverUri, uri) {
     if (serverUri === uri) return true
     try {
-        const a = path.resolve(fileURLToPath(serverUri)), b = path.resolve(fileURLToPath(uri))
+        // Real paths also fold Windows 8.3 short names (RUNNER~1 against runneradmin) and symlinks.
+        const real = (file) => { try { return fs.realpathSync.native(file) } catch { return path.resolve(file) } }
+        const a = real(fileURLToPath(serverUri)), b = real(fileURLToPath(uri))
         const same = process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b
         if (same && !sameFile.logged) { sameFile.logged = true; console.log(`Server URI spelling: ${serverUri} for ${uri}`) }
         return same
