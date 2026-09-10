@@ -80,6 +80,8 @@ async function main() {
         ] })
         const byId = Object.fromEntries(accepted.accepted.map(entry => [entry.id, entry]))
         assert.ok(byId.full.ok && byId.two.ok && byId.tick.ok, JSON.stringify(accepted))
+        // The tts systems count taken transitions; a tracker that saw "flags" would re-report old transitions every tick.
+        assert.equal(accepted.signaling, 'counters', JSON.stringify(accepted))
         assert.ok(!byId['bad-state'].ok && /Nowhere/.test(byId['bad-state'].message), JSON.stringify(byId['bad-state']))
         assert.ok(!byId['bad-expr'].ok && byId['bad-expr'].message, JSON.stringify(byId['bad-expr']))
         assert.ok(!byId['bad-name'].ok && /cuont/.test(byId['bad-name'].message), JSON.stringify(byId['bad-name']))
