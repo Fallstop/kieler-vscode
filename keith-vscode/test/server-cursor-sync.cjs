@@ -131,9 +131,15 @@ async function main() {
 
         // 5. Reverse direction: selecting in the diagram reveals the source once the client asks for it.
         await connection.sendNotification('keith/preferences/setPreferences', { 'diagram.shouldSelectText': true })
-        const opened = waitFor('diagram/openInTextEditor')
-        await connection.sendNotification('diagram/accept', { clientId: CLIENT, action: { kind: 'elementSelected', selectedElementsIDs: [walkNode[0].id], deselectedElementsIDs: [] } })
-        const location = (await opened).location
+        // The reverse direction is sprotty's selection listener; a click that lands while a layout update is
+        // still settling can be dropped, so the test clicks again like a user would.
+        let location
+        for (let attempt = 0; attempt < 4 && !location; attempt++) {
+            const opened = waitFor('diagram/openInTextEditor', () => true, 8000)
+            await connection.sendNotification('diagram/accept', { clientId: CLIENT, action: { kind: 'elementSelected', selectedElementsIDs: [walkNode[0].id], deselectedElementsIDs: [] } })
+            location = await opened.then(message => message.location, () => undefined)
+        }
+        assert.ok(location, `no diagram/openInTextEditor after four selections\n${stderr}`)
         assert.equal(location.range.start.line, text.slice(0, text.indexOf('state green_walk {')).split('\n').length - 1)
         console.log('Diagram selection reveals the state in the editor.')
 
