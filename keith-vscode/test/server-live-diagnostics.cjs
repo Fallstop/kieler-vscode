@@ -12,6 +12,7 @@ async function main() {
     const { java, serverArgs, sameFile } = require('./server-launch.cjs')
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-live-'))
     const server = spawn(java, serverArgs, { cwd: workspace })
+    const exited = new Promise(resolve => server.once('close', resolve))
     let stderr = ''
     server.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-12000) })
     const connection = createMessageConnection(new StreamMessageReader(server.stdout), new StreamMessageWriter(server.stdin))
@@ -155,7 +156,9 @@ async function main() {
         connection.sendNotification('exit')
         connection.dispose()
         server.kill()
-        fs.rmSync(workspace, { recursive: true, force: true })
+        // The server's working directory is the workspace; on Windows it cannot be removed while the process lives.
+        await exited
+        fs.rmSync(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
     }
 }
 
