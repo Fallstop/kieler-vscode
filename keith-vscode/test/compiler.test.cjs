@@ -26,7 +26,7 @@ test('compilation progress can exceed the server estimate without crashing or ma
     assert.ok(compiler.compilation.text.length < 100)
     await compiler.handleNewSnapshotDescriptions({ files: [] }, 'file:///model.sctx', true, 46, 43)
     assert.deepEqual(finished, [true])
-    assert.equal(compiler.compilation.tooltip, 'Compilation finished')
+    assert.match(compiler.compilation.tooltip, /^Compiled in \d+ ms$/)
 })
 
 test('cancelled compilations never start a simulation', async () => {

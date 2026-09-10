@@ -47,6 +47,47 @@ export interface ShownStageState {
     count: number
 }
 
+/** A breakpoint as shown in the preview; `state` for entry breakpoints, `expression` for conditions. */
+export interface BreakpointState {
+    id: string
+    kind: 'state' | 'condition'
+    state?: string
+    expression?: string
+    enabled: boolean
+    /** Rejected by the server: the reason, shown next to the breakpoint. */
+    error?: string
+    /** Accepted with a note, e.g. an ambiguous state name. */
+    note?: string
+}
+
+export interface WatchState {
+    id: string
+    expression: string
+    value?: unknown
+    error?: string
+}
+
+/** The breakpoint the simulation last stopped at. */
+export interface BreakpointPause {
+    id: string
+    kind: string
+    label: string
+    step: number
+}
+
+export interface SimulationDebugState {
+    breakpoints: BreakpointState[]
+    watches: WatchState[]
+    /** Set on the tick a breakpoint fired; cleared by the next tick. */
+    paused?: BreakpointPause
+    /** A rewind is possible: there is an earlier tick to go back to. */
+    canStepBack: boolean
+    /** The server is stepping on its own towards the next breakpoint. */
+    runningToBreakpoint: boolean
+    /** A loaded trace drives the inputs, so ticks cannot be replayed. */
+    traceLoaded: boolean
+}
+
 export interface SimulationViewState {
     phase: SimulationPhase
     canStart: boolean
@@ -67,6 +108,8 @@ export interface SimulationViewState {
     stage?: ShownStageState
     /** The model is an SCCharts file on disk, so C or Java can be generated from it. */
     canGenerate?: boolean
+    /** Breakpoints, watches and rewind availability of the running simulation. */
+    debug?: SimulationDebugState
 }
 
 export type SimulationViewCommand =
@@ -79,7 +122,6 @@ export type SimulationViewCommand =
     | { kind: 'restart' }
     | { kind: 'saveTrace' }
     | { kind: 'loadTrace' }
-    | { kind: 'openExternal' }
     | { kind: 'setInput'; id: string; value: unknown }
     | { kind: 'setStepDelay'; delay: number }
     | { kind: 'setShowInternal'; enabled: boolean }
@@ -87,6 +129,13 @@ export type SimulationViewCommand =
     | { kind: 'showModel' }
     | { kind: 'showStage' }
     | { kind: 'generateCode' }
+    | { kind: 'addBreakpoint'; state?: string; expression?: string }
+    | { kind: 'removeBreakpoint'; id: string }
+    | { kind: 'toggleBreakpoint'; id: string; enabled: boolean }
+    | { kind: 'addWatch'; expression: string }
+    | { kind: 'removeWatch'; id: string }
+    | { kind: 'stepBack'; toStep?: number }
+    | { kind: 'runToBreakpoint' }
 
 export const simulationStateNotification: NotificationType<SimulationViewState> = {
     method: 'keith/simulation/viewState',

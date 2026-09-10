@@ -69,6 +69,9 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
     /** Fires when the server delivers a diagram model, which is when a show request has really finished. */
     readonly onDidReceiveModel = this.modelReceived.event
 
+    /** When the webview last sent a user-driven action to the server, as `Date.now()`; 0 before any. */
+    lastInteraction = 0
+
     constructor(
         options: LspWebviewPanelManagerOptions,
         storageService: StorageService,
@@ -228,6 +231,10 @@ export class KLighDWebviewPanelManager extends LspWebviewPanelManager {
             messageParticipant: participant,
             identifier,
             onModelReceived: () => this.modelReceived.fire(),
+            onActionSent: (kind) => {
+                // The initial model request is the extension's doing, not the user's.
+                if (kind !== 'requestModel') this.lastInteraction = Date.now()
+            },
         }
         const endpoint = new KlighDWebviewEndpoint(options)
 

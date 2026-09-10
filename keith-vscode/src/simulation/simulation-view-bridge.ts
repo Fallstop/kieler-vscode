@@ -25,7 +25,6 @@ import { SettingsService } from '../settings'
 import {
     COMPILE_AND_SIMULATE,
     LOAD_TRACE,
-    OPEN_EXTERNAL_KVIZ_VIEW,
     PAUSE_SIMULATION,
     RUN_SIMULATION,
     SAVE_TRACE,
@@ -133,6 +132,8 @@ export class SimulationViewBridge implements vscode.Disposable {
             case 'pause':
                 if (this.simulation.play) {
                     await vscode.commands.executeCommand(PAUSE_SIMULATION.command)
+                } else if (this.simulation.debugger.runningToBreakpoint) {
+                    await this.simulation.debugger.pause()
                 }
                 break
             case 'stop':
@@ -146,9 +147,6 @@ export class SimulationViewBridge implements vscode.Disposable {
                 break
             case 'loadTrace':
                 await vscode.commands.executeCommand(LOAD_TRACE.command)
-                break
-            case 'openExternal':
-                await vscode.commands.executeCommand(OPEN_EXTERNAL_KVIZ_VIEW.command)
                 break
             case 'setInput': {
                 const data = this.simulation.simulationData.get(command.id)
@@ -166,6 +164,27 @@ export class SimulationViewBridge implements vscode.Disposable {
                 if (typeof command.enabled === 'boolean') {
                     await this.settings.set('showInternalVariables.enabled', command.enabled)
                 }
+                break
+            case 'addBreakpoint':
+                await this.simulation.debugger.addBreakpoint({ state: command.state, expression: command.expression })
+                break
+            case 'removeBreakpoint':
+                await this.simulation.debugger.removeBreakpoint(command.id)
+                break
+            case 'toggleBreakpoint':
+                await this.simulation.debugger.toggleBreakpoint(command.id, !!command.enabled)
+                break
+            case 'addWatch':
+                await this.simulation.debugger.addWatch(command.expression)
+                break
+            case 'removeWatch':
+                await this.simulation.debugger.removeWatch(command.id)
+                break
+            case 'stepBack':
+                await this.simulation.stepBack(command.toStep)
+                break
+            case 'runToBreakpoint':
+                await this.simulation.runToBreakpoint()
                 break
             default:
                 break
@@ -201,6 +220,7 @@ export class SimulationViewBridge implements vscode.Disposable {
             stale: matches && sim.stale,
             stage: shown ? { name: shown.name, position: shown.index + 1, count: shown.count } : undefined,
             canGenerate: !!uri && uri.scheme === 'file' && uri.path.endsWith('.sctx'),
+            debug: matches && sim.phase === 'running' ? sim.debugger.state(tick) : undefined,
         }
     }
 

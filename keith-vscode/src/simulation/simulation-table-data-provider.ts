@@ -32,7 +32,10 @@ import {
     COMPILE_AND_SIMULATE_SNAPSHOT,
     LOAD_TRACE,
     NEW_VALUE_SIMULATION,
-    OPEN_EXTERNAL_KVIZ_VIEW,
+    STEP_BACK_SIMULATION,
+    RUN_TO_BREAKPOINT,
+    ADD_BREAKPOINT,
+    ADD_WATCH,
     PAUSE_SIMULATION,
     REBUILD_SIMULATION,
     RUN_SIMULATION,
@@ -58,16 +61,17 @@ import {
     strMapToObj,
     Trace,
 } from './helper'
-import { SimulationPhase } from './protocol'
+import { BreakpointPause, SimulationPhase } from './protocol'
 import { isCompatibleInput } from './input-value'
 import { inputValue, readDataPool } from './data-pool'
 import { StepController } from './step-controller'
-import { waitForVisualization } from './visualization'
+import { DebugStepFields, SimulationDebugger } from './debugger'
 
 export const externalStepMessageType = 'keith/simulation/didStep'
 export const valuesForNextStepMessageType = 'keith/simulation/valuesForNextStep'
 export const externalStopMessageType = 'keith/simulation/externalStop'
 export const startedSimulationMessageType = 'keith/simulation/started'
+export const pausedSimulationMessageType = 'keith/simulation/paused'
 
 /** Workspace-state key remembering the Δt a user last set, reused when the next simulation starts. */
 const DELTA_T_KEY = 'keith.simulation.deltaT'
@@ -198,6 +202,9 @@ export class SimulationTableDataProvider {
     /** The model was edited after the running simulation was built. */
     public stale = false
 
+    /** Breakpoints, watches and rewinding of the running simulation. */
+    public readonly debugger: SimulationDebugger
+
     constructor(
         lsClient: LanguageClient,
         kico: CompilationDataProvider,
@@ -210,6 +217,14 @@ export class SimulationTableDataProvider {
 
         this.lsClient = lsClient
         this.kico = kico
+        this.debugger = new SimulationDebugger(
+            {
+                sendRequest: (method, param) => lsClient.sendRequest(method, param),
+                sendNotification: (method, param) => lsClient.sendNotification(method, param),
+            },
+            context.workspaceState,
+            () => this.onDidChangeViewStateEmitter.fire()
+        )
         this.simulationStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left)
         this.context.subscriptions.push(this.simulationStatus)
 
@@ -258,6 +273,9 @@ export class SimulationTableDataProvider {
             }),
             lsClient.onNotification(startedSimulationMessageType, (message: SimulationStartedMessage) => {
                 this.handleSimulationStarted(message)
+            }),
+            lsClient.onNotification(pausedSimulationMessageType, (hit: BreakpointPause) => {
+                this.handlePaused(hit)
             })
         )
         this.context.subscriptions.push(this)
@@ -320,18 +338,20 @@ export class SimulationTableDataProvider {
             vscode.commands.registerCommand(COMPILE_AND_SIMULATE_SNAPSHOT.command, () => this.compileAndSimulate(true))
         )
 
-        // Kviz commands
-
-        this.context.subscriptions.push(
-            vscode.commands.registerCommand(OPEN_EXTERNAL_KVIZ_VIEW.command, this.openExternalKVizView, this)
-        )
-
         this.context.subscriptions.push(
             vscode.commands.registerCommand(ADD_CO_SIMULATION.command, this.handleAddCoSimulation, this)
         )
 
         this.context.subscriptions.push(
             vscode.commands.registerCommand(NEW_VALUE_SIMULATION.command, this.newInputValue, this)
+        )
+
+        // Debugging commands
+        this.context.subscriptions.push(
+            vscode.commands.registerCommand(STEP_BACK_SIMULATION.command, () => this.stepBack()),
+            vscode.commands.registerCommand(RUN_TO_BREAKPOINT.command, () => this.runToBreakpoint()),
+            vscode.commands.registerCommand(ADD_BREAKPOINT.command, () => this.addBreakpointInteractively()),
+            vscode.commands.registerCommand(ADD_WATCH.command, () => this.addWatchInteractively())
         )
 
         // settings commands
@@ -809,6 +829,12 @@ export class SimulationTableDataProvider {
         this.simulationStep = 0
         this.phase = 'running'
         this.initializeTable()
+        // Breakpoints and watches remembered for this model apply to the new run.
+        if (this.modelUri) {
+            this.debugger.attach(this.modelUri).catch((error) => {
+                this.output.appendLine(`[WARN]\tBreakpoints could not be sent to the server: ${error}`)
+            })
+        }
         // The diagram preview carries the simulation controls, so bring it up next to the model being simulated.
         if (this.modelUri) {
             vscode.commands.executeCommand('keith-vscode.diagram.open', vscode.Uri.parse(this.modelUri), {
@@ -886,6 +912,7 @@ export class SimulationTableDataProvider {
     private setValuesToStopSimulation(): void {
         this.generation++
         this.stepper.reset()
+        this.debugger.detach()
         clearTimeout(this.startTimer)
         this.starting = false
         // Stop all simulation, i.e. empty maps and kill simulation process on LS
@@ -971,6 +998,10 @@ export class SimulationTableDataProvider {
         // Send the trace file uri to the server to convert it into a Trace model and to load it.
         const lClient = await this.lsClient
         const message = (await lClient.sendRequest('keith/simulation/loadTrace', uri.path)) as LoadedTraceMessage
+        if (message.successful) {
+            this.debugger.traceLoaded = true
+            this.onDidChangeViewStateEmitter.fire()
+        }
 
         if (!message.successful) {
             const errorMessage = `could not load trace: ${message.reason}`
@@ -1013,6 +1044,24 @@ export class SimulationTableDataProvider {
             this.fail(`Unexpected value for ${unknown} in simulation data. Restart the simulation.`)
             return false
         }
+        const debug = message as DebugStepFields
+        if (debug.rewound) {
+            // The server replayed the run up to an earlier tick: drop the later ticks from every trace.
+            const step = Math.max(0, debug.step ?? 0)
+            this.simulationData.forEach((history, key) => {
+                history.data.length = Math.min(history.data.length, step)
+                const present = Object.prototype.hasOwnProperty.call(message.values, key)
+                if (step > 0) history.data[step - 1] = present ? message.values[key] : history.data[step - 1]
+                if (present && history.input) {
+                    this.valuesForNextStep.set(key, inputValue(message.values[key], history.type))
+                }
+            })
+            this.changedValuesForNextStep.clear()
+            this.simulationStep = step
+            this.debugger.onStep(debug)
+            this.update()
+            return true
+        }
         this.simulationData.forEach((history, key) => {
             const present = Object.prototype.hasOwnProperty.call(message.values, key)
             const value = present ? message.values[key] : history.data[history.data.length - 1]
@@ -1023,8 +1072,108 @@ export class SimulationTableDataProvider {
         })
         this.simulationStep++
         this.stepper.acknowledge()
+        if (this.debugger.onStep(debug) && this.play) {
+            // A breakpoint fired: stop running ticks automatically, the user decides how to go on.
+            this.setPlaying(false)
+        }
         this.update()
         return true
+    }
+
+    /** The server reports a breakpoint separately as well, so a run loop stops even if the tick was missed. */
+    handlePaused(hit: BreakpointPause): void {
+        if (!this.simulationRunning || this.phase !== 'running') return
+        this.debugger.onPaused(hit)
+        if (this.play) this.setPlaying(false)
+    }
+
+    /** Rewinds to the state after `toStep`; the trace is trimmed when the server's rewound tick arrives. */
+    async stepBack(toStep = this.simulationStep - 1): Promise<boolean> {
+        if (!this.simulationRunning || this.phase !== 'running' || this.play || toStep < 0) return false
+        if (this.debugger.runningToBreakpoint) await this.debugger.pause()
+        const { generation } = this
+        try {
+            const result = await this.debugger.stepBack(toStep)
+            if (generation !== this.generation) return false
+            if (!result.ok) {
+                vscode.window.showWarningMessage(result.message ?? 'The simulation could not be rewound.')
+                return false
+            }
+            return true
+        } catch (error) {
+            if (generation === this.generation) this.fail(`The simulation could not be rewound: ${error}`)
+            return false
+        }
+    }
+
+    /** Quick pick of the model's states (from the server), or a typed condition, becomes a breakpoint. */
+    async addBreakpointInteractively(): Promise<void> {
+        if (!this.simulationRunning || !this.modelUri) {
+            vscode.window.showInformationMessage('Start a simulation first; breakpoints belong to the simulated model.')
+            return
+        }
+        interface StateInfo {
+            name: string
+            qualified: string
+            initial: boolean
+            current: boolean
+        }
+        let states: StateInfo[] = []
+        try {
+            const listed = await this.lsClient.sendRequest<{ states: StateInfo[]; message?: string }>(
+                'keith/simulation/states',
+                { uri: this.modelUri }
+            )
+            states = listed?.states ?? []
+        } catch (error) {
+            this.output.appendLine(`[WARN]\tStates could not be listed: ${error}`)
+        }
+        const condition = '$(debug-breakpoint-conditional) When a condition holds...'
+        const items: vscode.QuickPickItem[] = [
+            { label: condition, detail: 'Pause after any tick in which an expression over the variables is true' },
+            ...states
+                .filter((state) => state.qualified.includes('.'))
+                .map((state) => ({
+                    label: `$(debug-breakpoint) ${state.qualified}`,
+                    description: state.current ? 'active now' : state.initial ? 'initial' : undefined,
+                    detail: `Pause when ${state.name} is entered`,
+                })),
+        ]
+        const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Pause the simulation when...' })
+        if (!picked) return
+        if (picked.label === condition) {
+            const expression = await vscode.window.showInputBox({
+                prompt: 'Condition in SCCharts expression syntax, e.g. count >= 3 && !done or pre(x) != x',
+                validateInput: (value) => (value.trim() ? null : 'Enter an expression.'),
+            })
+            if (expression) await this.debugger.addBreakpoint({ expression })
+            return
+        }
+        await this.debugger.addBreakpoint({ state: picked.label.replace(/^\$\([^)]*\)\s*/, '') })
+    }
+
+    async addWatchInteractively(): Promise<void> {
+        if (!this.simulationRunning || !this.modelUri) {
+            vscode.window.showInformationMessage(
+                'Start a simulation first; watches show values of the running simulation.'
+            )
+            return
+        }
+        const expression = await vscode.window.showInputBox({
+            prompt: 'Expression to show after every tick, e.g. count * 10 or pre(x) != x',
+            validateInput: (value) => (value.trim() ? null : 'Enter an expression.'),
+        })
+        if (expression) await this.debugger.addWatch(expression)
+    }
+
+    /** Lets the server step until a breakpoint fires; every tick still arrives as a step message. */
+    async runToBreakpoint(): Promise<void> {
+        if (!this.simulationRunning || this.phase !== 'running' || this.play) return
+        if (this.debugger.breakpoints.every((breakpoint) => !breakpoint.enabled || breakpoint.error)) {
+            vscode.window.showInformationMessage('Add an enabled breakpoint first.')
+            return
+        }
+        await this.debugger.runToBreakpoint()
     }
 
     handleExternalNewUserValue(values: unknown): void {
@@ -1054,20 +1203,6 @@ export class SimulationTableDataProvider {
                     vscode.commands.executeCommand(RESTART_LANGUAGE_SERVER.command)
                 }
             })
-    }
-
-    /**
-     * Start the simulation visualization socket server and opens a browser window.
-     */
-    async openExternalKVizView(): Promise<void> {
-        if (!this.simulationRunning || this.phase !== 'running') return
-        await this.lsClient.start()
-        await this.lsClient.sendNotification('keith/simulation/startVisualizationServer')
-        const url = 'http://localhost:5010/visualization'
-        await waitForVisualization(url)
-        if (!(await vscode.env.openExternal(vscode.Uri.parse(url)))) {
-            throw new Error('The visualization could not be opened in the browser.')
-        }
     }
 
     getExtensionFileUri(...segments: string[]): vscode.Uri {

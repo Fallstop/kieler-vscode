@@ -45,6 +45,7 @@ body.kv-resizing {
 }
 
 .kv-root {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -719,4 +720,260 @@ body .sidebar {
 
 .kv-input.kv-invalid {
     border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+}
+
+/* ---- Debugging: breakpoints, watches, rewinding ---- */
+
+:root {
+    --kv-hit: var(--vscode-debugIcon-breakpointForeground, #e51400);
+    --kv-hit-bg: var(--vscode-debugView-stateLabelBackground, rgba(229, 20, 0, 0.14));
+}
+
+.kv-btn-hit {
+    color: var(--kv-hit);
+}
+
+.kv-popover {
+    position: absolute;
+    top: calc(var(--kv-toolbar-height) + 2px);
+    right: 8px;
+    z-index: 20;
+    width: min(420px, calc(100vw - 16px));
+    padding: 8px 10px 10px;
+    border: 1px solid var(--kv-border);
+    border-radius: 6px;
+    background: var(--kv-surface);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    font-size: 12px;
+}
+
+.kv-popover-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.kv-debug-list {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.kv-debug-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 1px 2px;
+    border-radius: 3px;
+}
+
+.kv-debug-item:hover {
+    background: var(--kv-hover);
+}
+
+.kv-debug-item input[type='checkbox'] {
+    margin: 0;
+}
+
+.kv-debug-kind {
+    color: var(--kv-hit);
+    flex: 0 0 auto;
+}
+
+.kv-debug-text {
+    font-family: var(--kv-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kv-debug-error .kv-debug-text {
+    text-decoration: underline wavy var(--vscode-errorForeground, #f14c4c);
+}
+
+.kv-debug-hit {
+    background: var(--kv-hit-bg);
+}
+
+.kv-debug-problem,
+.kv-debug-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--kv-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kv-debug-problem {
+    color: var(--vscode-errorForeground, #f14c4c);
+}
+
+.kv-debug-remove {
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.kv-debug-empty,
+.kv-debug-hint {
+    margin: 0 0 8px;
+    color: var(--kv-muted);
+}
+
+.kv-debug-hint {
+    margin: 8px 0 0;
+}
+
+.kv-debug-add {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 8px;
+    align-items: center;
+}
+
+.kv-debug-add-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--kv-muted);
+}
+
+.kv-debug-entry {
+    width: 100%;
+    box-sizing: border-box;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--vscode-input-border, var(--kv-border));
+    border-radius: 3px;
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    font: inherit;
+    font-family: var(--kv-mono);
+}
+
+.kv-debug-entry:focus {
+    outline: 1px solid var(--kv-accent);
+    outline-offset: -1px;
+}
+
+.kv-notice-host:empty {
+    display: none;
+}
+
+.kv-pause-notice {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 3px 10px;
+    border-bottom: 1px solid var(--kv-border);
+    background: var(--kv-hit-bg);
+    color: var(--vscode-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kv-pause-notice .kv-icon {
+    color: var(--kv-hit);
+}
+
+.kv-watches {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--kv-border);
+}
+
+.kv-watches[hidden] {
+    display: none;
+}
+
+.kv-watches-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--kv-muted);
+    font-weight: 600;
+}
+
+.kv-watch {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 4px 0 6px;
+    border: 1px solid var(--kv-border);
+    border-radius: 10px;
+    font-family: var(--kv-mono);
+    white-space: nowrap;
+}
+
+.kv-watch-expr {
+    color: var(--kv-muted);
+}
+
+.kv-watch-eq {
+    color: var(--kv-muted);
+}
+
+.kv-watch-value {
+    font-weight: 600;
+}
+
+.kv-watch-error .kv-watch-value {
+    color: var(--vscode-errorForeground, #f14c4c);
+}
+
+.kv-watch-remove {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--kv-muted);
+    cursor: pointer;
+}
+
+.kv-watch-remove:hover {
+    background: var(--kv-hover);
+    color: var(--vscode-foreground);
+}
+
+.kv-watches .kv-debug-entry {
+    width: 220px;
+    max-width: 100%;
+    height: 20px;
+}
+
+.kv-col-tick.kv-rewindable {
+    cursor: pointer;
+}
+
+.kv-col-tick.kv-rewindable:hover,
+.kv-col-tick.kv-rewindable:focus-visible {
+    background: var(--kv-hover);
+    outline: none;
+}
+
+.kv-col-tick.kv-hit,
+.kv-cell.kv-hit {
+    box-shadow: inset 0 -2px 0 var(--kv-hit);
+    animation: kv-hit-flash 0.6s ease-out 1;
+}
+
+@keyframes kv-hit-flash {
+    from {
+        background: var(--kv-hit-bg);
+    }
 }

@@ -37,6 +37,9 @@ export interface ToolbarHost {
     send(command: SimulationViewCommand): void
     toggleDrawer(): void
     drawerOpen(): boolean
+    /** Opens or closes the breakpoint list; the toolbar only renders the button. */
+    toggleBreakpoints?(): void
+    breakpointsOpen?(): boolean
 }
 
 /**
@@ -63,6 +66,13 @@ export class Toolbar {
             state.stage,
             state.canGenerate,
             this.host.drawerOpen(),
+            this.host.breakpointsOpen?.() ?? false,
+            state.debug && [
+                state.debug.canStepBack,
+                state.debug.runningToBreakpoint,
+                state.debug.paused?.id,
+                state.debug.breakpoints.map((breakpoint) => [breakpoint.enabled, breakpoint.error]),
+            ],
         ])
         if (key === this.renderKey) {
             // Only the tick moved; patching it in place keeps focus and avoids any layout shift.
@@ -84,6 +94,16 @@ export class Toolbar {
             'div.kv-toolbar-right',
             {},
             state.phase === 'running' && this.traceButtons(),
+            state.phase === 'running' &&
+                state.debug &&
+                this.toggle(
+                    'debug-breakpoint-conditional',
+                    this.breakpointLabel(state),
+                    this.host.breakpointsOpen?.() ?? false,
+                    'Pause the simulation when a state is entered or a condition holds',
+                    () => this.host.toggleBreakpoints?.(),
+                    state.debug.paused ? '.kv-btn-hit' : ''
+                ),
             state.phase === 'running' &&
                 this.toggle(
                     'symbol-misc',
@@ -171,21 +191,22 @@ export class Toolbar {
                 state.error && h('span.kv-error', { title: state.error, role: 'alert' }, icon('warning'), state.error)
             )
         }
-        const runOrPause = state.playing
-            ? this.button(
-                  'debug-pause',
-                  'Pause',
-                  'Stop running ticks automatically (R)',
-                  () => this.host.send({ kind: 'pause' }),
-                  '.kv-btn-active.kv-btn-playback'
-              )
-            : this.button(
-                  'debug-start',
-                  'Run',
-                  'Run ticks automatically, one every delay (R)',
-                  () => this.host.send({ kind: 'play' }),
-                  '.kv-btn-playback'
-              )
+        const runOrPause =
+            state.playing || state.debug?.runningToBreakpoint
+                ? this.button(
+                      'debug-pause',
+                      'Pause',
+                      'Stop running ticks automatically (R)',
+                      () => this.host.send({ kind: 'pause' }),
+                      '.kv-btn-active.kv-btn-playback'
+                  )
+                : this.button(
+                      'debug-start',
+                      'Run',
+                      'Run ticks automatically, one every delay (R)',
+                      () => this.host.send({ kind: 'play' }),
+                      '.kv-btn-playback'
+                  )
         return h(
             'div.kv-toolbar-middle',
             {},
@@ -208,14 +229,25 @@ export class Toolbar {
                           () => this.host.send({ kind: 'restart' })
                       ),
                 this.button(
+                    'debug-step-back',
+                    'Back',
+                    state.debug?.traceLoaded
+                        ? 'A loaded trace drives the inputs, so ticks cannot be replayed'
+                        : 'Go back one tick: the run is replayed with the same inputs (Backspace)',
+                    () => this.host.send({ kind: 'stepBack' }),
+                    '',
+                    state.playing || !state.debug?.canStepBack || !!state.debug?.runningToBreakpoint
+                ),
+                this.button(
                     'debug-step-over',
                     'Step',
                     'Execute exactly one tick (Space)',
                     () => this.host.send({ kind: 'step' }),
                     '',
-                    state.playing
+                    state.playing || !!state.debug?.runningToBreakpoint
                 ),
                 runOrPause,
+                this.continueButton(state),
                 this.button('debug-stop', 'Stop', 'End the simulation and clear the trace', () =>
                     this.host.send({ kind: 'stop' })
                 )
@@ -290,11 +322,37 @@ export class Toolbar {
             ),
             this.iconButton('folder-opened', 'Load a .ktrace file to replay', () =>
                 this.host.send({ kind: 'loadTrace' })
-            ),
-            this.iconButton('link-external', 'Open the KIELER visualization in the browser', () =>
-                this.host.send({ kind: 'openExternal' })
             )
         )
+    }
+
+    /** "Continue" steps on the server until a breakpoint fires; while it runs the button pauses it. */
+    private continueButton(state: SimulationViewState): HTMLElement {
+        const armed = (state.debug?.breakpoints ?? []).some((breakpoint) => breakpoint.enabled && !breakpoint.error)
+        if (state.debug?.runningToBreakpoint) {
+            return this.button(
+                'debug-pause',
+                'Stop run',
+                'Stop stepping towards the next breakpoint',
+                () => this.host.send({ kind: 'pause' }),
+                '.kv-btn-active'
+            )
+        }
+        return this.button(
+            'debug-continue',
+            'Continue',
+            armed
+                ? 'Run ticks as fast as possible until a breakpoint fires (C)'
+                : 'Add a breakpoint first, then run until it fires',
+            () => this.host.send({ kind: 'runToBreakpoint' }),
+            '',
+            state.playing || !armed
+        )
+    }
+
+    private breakpointLabel(state: SimulationViewState): string {
+        const count = (state.debug?.breakpoints ?? []).filter((breakpoint) => breakpoint.enabled).length
+        return count ? `Breakpoints (${count})` : 'Breakpoints'
     }
 
     private button(
@@ -324,15 +382,24 @@ export class Toolbar {
         return h('button.kv-btn.kv-btn-icon', { type: 'button', title, 'aria-label': title, onclick }, icon(iconName))
     }
 
-    private toggle(iconName: string, label: string, on: boolean, title: string, onclick: () => void): HTMLElement {
+    private toggle(
+        iconName: string,
+        label: string,
+        on: boolean,
+        title: string,
+        onclick: () => void,
+        extra = ''
+    ): HTMLElement {
+        // The breakpoint count changes the label; the control key stays stable so focus survives a rerender.
+        const control = label.startsWith('Breakpoints') ? 'Breakpoints' : label
         return h(
-            `button.kv-btn.kv-btn-toggle${on ? '.kv-btn-active' : ''}`,
+            `button.kv-btn.kv-btn-toggle${on ? '.kv-btn-active' : ''}${extra}`,
             {
                 type: 'button',
                 title: `${label}: ${title}`,
                 'aria-label': label,
                 'aria-pressed': String(on),
-                'data-control': label,
+                'data-control': control,
                 onclick,
             },
             icon(iconName),

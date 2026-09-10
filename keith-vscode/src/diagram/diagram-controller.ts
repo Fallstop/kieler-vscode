@@ -171,6 +171,11 @@ export class DiagramController {
         return this.manager?.currentUri
     }
 
+    /** When the user last acted on the diagram, as `Date.now()`; 0 before any interaction. */
+    get lastDiagramInteraction(): number {
+        return this.manager?.lastInteraction ?? 0
+    }
+
     /** Resolves once the server delivers the next diagram model, or after the timeout when none arrives. */
     nextModel(timeoutMs = 15000): Promise<void> {
         const { manager } = this

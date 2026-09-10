@@ -13,15 +13,9 @@ Both the original and this fork are licensed under the Eclipse Public License 2.
 
 ## Features
 
-Adds language support for various languages that are part of the
-[KIELER project](https://rtsys.informatik.uni-kiel.de/kieler).
-
--   Support for SCCharts
--   Support for Elk Graph
--   Support for KGraph
--   Support for Kieler Visualization
--   Support for Estrel
--   Support for Lustre
+Language support for SCCharts (`.sctx`), SCL (`.scl`) and KiCo compilation systems (`.kico`)
+from the [KIELER project](https://rtsys.informatik.uni-kiel.de/kieler): syntax highlighting,
+validation while typing, hover, go to definition, outline, diagrams, compilation and simulation.
 
 Diagram visualization and simulation are included in this extension. Open a model's
 preview to simulate, step through ticks, edit inputs, and inspect its variable trace.
@@ -33,6 +27,69 @@ diagram back to the SCChart.
 Editing a model while its simulation runs marks the run as out of date: **Restart** becomes
 **Rebuild**, which compiles the model again with the same simulation system and starts over
 from tick 0. Unsaved edits are saved first.
+
+### Breakpoints, watches and stepping back
+
+The simulation can pause itself. **Breakpoints** in the preview's toolbar opens a list where a
+breakpoint is either a state to pause on when it is entered (`Full`, or qualified as
+`Counter.Counting.Full` when several states share a name) or a condition over the variables
+that pauses after any tick in which it holds (`count >= 3 && !done`, `pre(x) != x`). The
+server validates each one and shows why one was rejected next to it. **Continue** (`C`) runs
+ticks as fast as the model allows until a breakpoint fires; a running simulation (**Run**)
+stops on a breakpoint as well. The tick the simulation paused at is marked in the trace.
+
+**Watch** expressions, above the trace table, are evaluated after every tick in the same
+syntax and show their value or the reason they cannot be evaluated. Both are remembered per
+model, so a restarted or rebuilt simulation keeps them. The Command Palette has **Add
+simulation breakpoint...** (a pick list of the model's states, or a condition) and **Add
+simulation watch expression...**.
+
+**Back** (`Backspace`) rewinds one tick, and clicking an earlier tick's header in the trace
+rewinds to it. This is a real rewind, not a replay of a recording: the compiled program is
+restarted and every input you gave is fed to it again up to that tick, so the diagram, the
+trace and the watches show the model exactly as it was, and stepping forward from there can
+take a different path if you change an input. A loaded `.ktrace` drives the inputs itself,
+so its ticks cannot be rewound.
+
+The diagram follows the editor cursor: place the cursor in a state, region or transition and
+the diagram expands the regions around it and selects it. `keith-vscode.diagram.followCursor`
+picks `focus` (default), `expand` (collapse the regions you are not in as well, unless you
+expanded them yourself and the diagram remembers expansion states) or `off`. **Reveal Cursor
+in Diagram** (Command Palette, editor context menu) does the same once, whatever the setting;
+bind it to a key such as `ctrl+alt+r` if you use it often. Clicking an element in the diagram
+selects its text in the editor (`keith-vscode.diagram.selectText`).
+
+### Live diagnostics
+
+SCCharts are analysed while you type. About half a second after the last edit the server runs
+the model through the front half of the netlist compiler (normalisation, SCG, dependency and
+loop analysis, scheduler) and shows what it finds as squiggles labelled **KIELER · live**:
+scheduling cycles with the variables involved and the two operations that conflict,
+instantaneous loops, clocks shared between concurrent regions, redeclared inherited variables
+and regions, and every other located compiler finding. No code is generated and nothing is
+written to disk. A compile you start yourself takes over the document until you edit it again.
+`keith-vscode.liveDiagnostics.enabled` turns it off; `keith-vscode.liveDiagnostics.debounceMs`
+changes the wait. On a 300-line model the analysis takes about a second cold and a third of
+that warm.
+
+### Editor features
+
+Hovering a name in an SCChart shows a card built from the model, not only from doc comments:
+a declaration's kind, type, initial value, the scope it lives in, how often it is written and
+read, and the comment above it (`// ...`, `/** ... */` before the element, or a trailing
+`//* ...`). Hovering a state lists its regions, actions, outgoing transitions with their
+triggers, and the states it is entered from; a transition shows its source and target,
+priority, preemption (`go to`, `abort to`, `join to`), whether it is immediate, its trigger
+and its effects; a region names its initial and final states. Hovering a reference (a
+variable in a trigger, the target of a `go to`) shows the card of the declaration.
+**Go to Definition**, **Find All References** and **Rename** work on variables and states,
+and the Outline lists the chart's declarations, states and regions with their kinds.
+
+While a model compiles, the status bar shows the running processor and its place in the
+pipeline (`SCG (12/38)`); afterwards it shows the wall time, with the number of processors
+and the slowest one in the tooltip. **Stages** lists every processor's duration, flags the
+slowest, and puts the total in its title. A failed compilation reports the stages that never
+ran as skipped.
 
 Compilation failures appear above the diagram and in VS Code Problems. Scheduler
 conflicts link to the participating source operations and explain their circular
@@ -55,6 +112,30 @@ Source edits mark old diagnostics as stale until the next compilation. Compatibl
 fixed-size array assignments offer a **Copy array elements individually** quick fix
 in the editor. Timing changes needed to resolve scheduler conflicts remain explicit
 modeling decisions.
+
+### Custom compilation systems
+
+The compile menu is not limited to the built-in systems. Any `.kico` file in the workspace
+defines a compilation system of its own and appears under a **Workspace** heading in
+**Compile current model with...** the moment it is saved without errors; no server restart,
+no registration. **New compilation system (.kico) in workspace** (command palette) creates
+`kico/<id>.kico` from a commented template and opens it. A minimal system that reuses the
+built-in netlist chain and generates C:
+
+```
+public system my.netlist
+    label "My netlist (workspace)"
+
+    system de.cau.cs.kieler.sccharts.netlist
+```
+
+Systems are sequences of processor ids and included systems, exactly like the built-in
+`.kico` files; unknown processor or system ids, an id that shadows a built-in system, and
+syntax errors are underlined in the `.kico` editor and reported in a warning, so a broken file is
+never skipped silently. Folders outside the workspace (a shared team directory, say) are added
+with `keith-vscode.compilationSystems.folders`, absolute or relative to the workspace folder.
+Build output and dependency folders (`node_modules`, `target`, `out`, `dist`, `build`, `bin`,
+`kieler-gen`, dot-folders) are not scanned.
 
 ### Generate C and Java
 
@@ -117,6 +198,17 @@ Java simulation compiles with `javac`, which the bundled runtime does not includ
 `keith-vscode.javaHome` at a JDK 21 or newer (or have one on PATH) to use it; C simulation does
 not need this.
 
+**Startup cache.** The language server starts from a class-data-sharing archive
+([AppCDS](https://docs.oracle.com/en/java/javase/21/vm/class-data-sharing.html)) that is built
+on your machine: the first start records which classes the server loads, a background
+`java -Xshare:dump` (about 3 s, 65 MB in the extension's global storage) turns the list into
+the archive when that server exits, and every later start maps it. Measured on the bundled
+runtime, `initialize` drops from 1.5 s to 1.0 s and the Compile menu is ready after 1.8 s
+instead of 2.6 s, with 140 MB less resident memory. The archive is keyed to the exact server
+build and Java binary, so an update rebuilds it; a damaged file is skipped with a warning; a
+server that crashes right after starting with it discards it. **SCCharts Lab: Clear language
+server startup cache** deletes it, `keith-vscode.startupCache.enabled` turns it off.
+
 Diagrams use KIELER's light palette whatever the editor theme; set
 `keith-vscode.diagramColorTheme` to `editor` to let dark themes switch to the dark palette.
 
@@ -143,6 +235,12 @@ command flags the package as a Marketplace pre-release. Any machine builds any t
 jdk-21.0.x+y` moves the manifest to a newer Temurin release. `yarn build:jre` links the runtime
 for the current machine, and `SCCHARTS_JAVA=server/jre/bin/java yarn test:server` runs the
 server suites on it, which is how the module list is kept honest.
+
+`node scripts/measure-startup.cjs --compile --config baseline,static,static+tiered1` times the
+server start (`initialize`, first compilation systems, a compile, resident memory) under
+different JVM options on the host JDK or, with `SCCHARTS_JAVA=server/jre/bin/java`, on the
+linked runtime; it is how the startup cache's flags were chosen (see the changelog for 0.9.0).
+`plan/native-launcher.md` records the jpackage and native-image assessment.
 
 Releases are published by tagging `vX.Y.Z` (matching `package.json`) on GitHub; a `vX.Y.Z-pre`
 tag publishes the same version as a pre-release (GitHub pre-release, Marketplace and Open VSX

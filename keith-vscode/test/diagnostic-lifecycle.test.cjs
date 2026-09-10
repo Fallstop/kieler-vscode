@@ -119,7 +119,8 @@ test('loop warnings explained by a scheduler cycle are dropped; standalone ones 
     const doc = document('file:///demo.sctx', 'scchart Demo { int x\n }')
     const uri = doc.uri.toString()
     const at = (offset, label) => ({ uri, offset, length: 3, label })
-    const loop = (locations) => ({ code: 'instantaneous-loop', message: 'Instantaneous loop detected!', severity: 'warning', hint: 'Make one transition delayed.', locations, cycle: [] })
+    // The analyzer names the symbols itself now; the client shows its message as sent.
+    const loop = (locations) => ({ code: 'instantaneous-loop', message: 'Potential instantaneous loop through x.', severity: 'warning', hint: 'Make one transition delayed.', locations, cycle: [] })
     const cycle = { code: 'scheduling-cycle', message: 'Circular dependency prevents scheduling this tick.', severity: 'error', locations: [at(15, 'x = 1'), at(19, 'x = 2')], cycle: [] }
     await diagnostics.begin(uri)
     let report = diagnostics.finish(uri, [[

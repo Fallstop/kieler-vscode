@@ -4,6 +4,106 @@ All notable changes to the "keith-vscode" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.9.0] - 2026-09-11
+
+- **Diagnostics while typing.** Open SCCharts are analysed after every edit (debounced,
+  `keith-vscode.liveDiagnostics.debounceMs`, default 400 ms) through a new server-side
+  system, `de.cau.cs.kieler.sccharts.live.analysis`, that runs the netlist chain as far as the
+  scheduler and generates no code. Scheduling cycles, instantaneous loops and the other
+  located findings appear as **KIELER · live** squiggles without pressing Compile; a compile
+  report for the same document version takes precedence. `keith-vscode.liveDiagnostics.enabled`
+  turns it off. Protocol: `keith/diagnostics/live` (server → client),
+  `keith/diagnostics/configure` and `keith/diagnostics/analyze` (client → server).
+- **Messages come from the analyzer that knows the cause.** The loop analyzer and the guard
+  scheduler now emit structured issues themselves, naming the variables involved
+  (`Circular dependency involving timeout_update prevents scheduling this tick.`); the
+  extension no longer rewrites messages after the fact. The timed-automata expansion explains a
+  clock shared between concurrent regions, the inheritance processor explains redeclared
+  variables and regions, and the loop analyzer explains a sequential region re-entered in the
+  same tick, each at its source range with a hint. Every other compiler message that names a
+  model element now keeps its source location through the copies the compiler makes.
+
+- **Simulation breakpoints, watch expressions and stepping back.** A breakpoint pauses the
+  simulation when a state is entered (`Full`, or `Counter.Counting.Full` when names repeat) or
+  when a condition over the variables holds after a tick (`count >= 3 && !done`, `pre(x) != x`
+  reads the previous tick). **Continue** runs to the next breakpoint on the server; **Run**
+  stops on one too. Watches show an expression's value after every tick, with the reason when
+  it cannot be evaluated. **Back**, `Backspace`, or a click on an earlier tick rewinds the
+  simulation for real: the program is restarted and the recorded inputs are replayed up to
+  that tick (a few milliseconds for hundreds of ticks), so trace, diagram and watches match and
+  stepping forward with a changed input takes a different path. Breakpoints and watches are
+  remembered per model. New commands **Add simulation breakpoint...** (pick a state or type a
+  condition), **Add simulation watch expression...**, **Step back one tick** and **Run to
+  breakpoint**. Server methods `keith/simulation/setBreakpoints`, `setWatches`,
+  `runToBreakpoint`, `pause`, `history`, `stepBack` and `states`; step messages carry `step`,
+  `watches` and `breakpoint`; `keith/simulation/paused` announces a hit.
+- **The diagram follows the editor cursor.** Moving the cursor in an SCChart expands the
+  regions around it in the open diagram and selects the state, region or transition under it,
+  as the Eclipse editor's smart collapse did. `keith-vscode.diagram.followCursor` chooses
+  `focus` (default), `expand` (also collapse the regions the cursor is not in, unless you
+  expanded them yourself) or `off`; **Reveal Cursor in Diagram** does it once from the palette
+  or the editor context menu. Selecting an element in the diagram selects its text in the editor
+  (`keith-vscode.diagram.selectText`). The server answers `keith/diagram/cursor` by mapping the
+  offset to the model element and relaying out; it leaves compiler snapshots alone.
+- **Hover cards, outline and timings from the language server.** Hovering a variable, signal,
+  state, region, transition or action in an SCChart shows a Markdown card built from the model:
+  declaration, type, initial value, scope, write/read counts, the comment above it, a state's
+  regions and transitions, a transition's priority and preemption. Go to Definition, Find All
+  References and Rename already worked and stay; the Outline now shows simple names with element
+  kinds and details (`input bool`, `initial state`, `controlflow region, 2 states`) instead of a
+  flat list of dotted paths. The compiler reports each processor as it starts
+  (`keith/kicool/progress`) and, in `didCompile`, every processor's duration, start time and
+  status, the total wall time and the stages that never ran; the status bar names the running
+  processor and the compile time, and **Stages** shows each stage's duration and flags the
+  slowest.
+- **Compilation systems from the workspace.** Every `.kico` file in the workspace (outside
+  build and dependency folders) is loaded by the language server and listed under a
+  **Workspace** heading in **Compile current model with...**, with the file it comes from; saving
+  the file, or editing it in the editor, replaces the system at once and deleting it removes the
+  entry. Errors show as squiggles in the `.kico` editor and as a warning: syntax errors, unknown
+  processor or system ids, and ids that shadow a built-in system. New command **New compilation
+  system (.kico) in workspace** writes a commented template; new setting
+  `keith-vscode.compilationSystems.folders` adds directories outside the workspace. `.kico` is
+  now a language of the extension, served by the language server. This replaces the
+  Eclipse-only system registration that the sccharts-lite server dropped.
+- **The language server starts a third faster after the first two starts.** It now runs from
+  an AppCDS archive built on your machine: start 1 records the loaded classes
+  (`-XX:DumpLoadedClassList`), a detached low-priority `java -Xshare:dump` builds the archive
+  (about 3 s, 65 MB under the extension's global storage, keyed to the exact jar and Java
+  binary) when that server exits, and later starts map it with `-XX:SharedArchiveFile`,
+  `-Xshare:auto` and `-XX:+VerifySharedSpaces`. The archive has to be built there because five
+  of the six bundled runtimes are cross-linked and `jlink --generate-cds-archive` and
+  `-XX:+AutoCreateSharedArchive` both need the target JVM to run. JVM logging now goes to
+  stderr (`-Xlog:disable -Xlog:all=warning:stderr`): HotSpot prints its warnings to stdout,
+  the LSP channel, and one `[warning][cds]` line was enough to stall the protocol. Without
+  `VerifySharedSpaces` a damaged archive crashes the JVM (SIGSEGV) instead of being skipped. A
+  crash within 20 s of a start with the archive discards it. New command **Clear language
+  server startup cache**, new setting `keith-vscode.startupCache.enabled`, cache state in
+  **Show Java runtime and C compiler in use**. Measured with `scripts/measure-startup.cjs`
+  (medians of five starts, `test/fixtures/audit.sctx`, bundled Temurin 21.0.12.1 image):
+
+  | configuration | initialize | compile menu ready | compile | RSS |
+  |---|---|---|---|---|
+  | as before | 1533 ms | 2578 ms | 498 ms | 699 MB |
+  | `-XX:+AutoCreateSharedArchive` (dynamic) | 1525 ms | 2583 ms | 490 ms | 704 MB |
+  | static archive (shipped) | 993 ms | 1815 ms | 486 ms | 564 MB |
+  | static + `-XX:TieredStopAtLevel=1` | 853 ms | 2032 ms | 436 ms | 250 MB |
+  | static + `-Xss512k` | 1104 ms | 2106 ms | 540 ms | 561 MB |
+
+  The dynamic archive does nothing on the jlink image (no base archive). C1-only starts
+  150 ms sooner and halves memory but warm compiles settle at 240 ms instead of 142 ms
+  (six compiles of `broken-demo.sctx` in one session), so it stays off; `-Xss`, Serial and
+  Parallel GC, `-XX:CICompilerCount=2` and `-Xmx2g` were within noise. `jlink
+  --generate-cds-archive` would add 27 MB to the linux-x64 image only and is not used.
+  `plan/native-launcher.md` measures jpackage (+0.6 MB for a native `sccharts-server`
+  launcher, six OS-specific build jobs and signing) and lists the native-image blockers.
+- **Removed the languages the server no longer serves.** KGraph (`.kgt`, `.kgx`), ELK Graph
+  (`.elkt`, `.elkj`), Esterel (`.strl`), KiVis (`.kviz`) and Lustre (`.lus`) were still registered
+  as languages with grammars and activation events, although the sccharts-lite server dropped them
+  in 0.8.0; opening such a file started the server for nothing. The extension now activates for
+  `.sctx`, `.scl` and `.kico` only. The **Open KIELER visualization in browser** command and its
+  toolbar button are gone with the KiVis visualization server they depended on.
+
 ## [0.8.3] - 2026-09-10
 
 - Uninstalling the extension deletes the downloaded w64devkit toolchain. VS Code keeps an

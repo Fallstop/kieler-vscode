@@ -19,7 +19,19 @@ import * as vscode from 'vscode'
 import { LanguageClient } from 'vscode-languageclient/node'
 import { Utils } from 'vscode-uri'
 import { CompilerDiagnostics } from './compiler-diagnostics'
+import {
+    CompileProgress,
+    ProcessorInfo,
+    ProcessorTiming,
+    finishedSummary,
+    formatDuration,
+    progressText,
+    progressTooltip,
+    slowestProcessor,
+    stageTiming,
+} from './compile-progress'
 import { CompilerIssue } from './diagnostic-protocol'
+import { groupSystemsForQuickPick, pickedSystem, SystemQuickPickItem } from './workspace-systems'
 import { GeneratedCodeDocuments, GeneratedFile } from './generated-code-documents'
 import { Settings } from '../constants'
 import { SettingsService } from '../settings'
@@ -49,6 +61,7 @@ export const SHOW_NEXT_KEYBINDING = 'alt+j'
 
 export const EDITOR_UNDEFINED_MESSAGE = 'Editor is undefined'
 export const snapshotDescriptionMessageType = 'keith/kicool/didCompile'
+export const compileProgressMessageType = 'keith/kicool/progress'
 export const cancelCompilationMessageType = 'keith/kicool/cancel-compilation'
 export const compilationSystemsMessageType = 'keith/kicool/compilation-systems'
 
@@ -190,6 +203,9 @@ export class CompilationDataProvider {
                     this.handleReceiveSystemDescriptions(param.systems, param.snapshotSystems)
                 }
             ),
+            lsClient.onNotification(compileProgressMessageType, (params: CompileProgress) =>
+                this.handleProgress(params)
+            ),
             lsClient.onNotification(
                 snapshotDescriptionMessageType,
                 (params: {
@@ -198,6 +214,7 @@ export class CompilationDataProvider {
                     finished: boolean
                     currentIndex: number
                     maxIndex: number
+                    currentProcessor?: ProcessorInfo
                 }) => {
                     // The server spells the URI its own way (drive letters and encoding differ on
                     // Windows); every lookup here uses VS Code's spelling.
@@ -206,7 +223,8 @@ export class CompilationDataProvider {
                         vscode.Uri.parse(params.uri).toString(),
                         params.finished,
                         params.currentIndex,
-                        params.maxIndex
+                        params.maxIndex,
+                        params.currentProcessor
                     )
                 }
             )
@@ -365,13 +383,8 @@ export class CompilationDataProvider {
                 const quickPick = vscode.window.createQuickPick()
                 quickPick.items = options
                 quickPick.onDidChangeSelection((selection) => {
-                    if (selection[0]) {
-                        this.systems.forEach((system) => {
-                            if (system.label === selection[0].label) {
-                                this.compileAndPresent(system.id, system.snapshotSystem)
-                            }
-                        })
-                    }
+                    const system = pickedSystem(this.systems, selection[0] as SystemQuickPickItem)
+                    if (system) this.compileAndPresent(system.id, system.snapshotSystem)
                     quickPick.hide()
                 })
                 quickPick.onDidHide(() => quickPick.dispose())
@@ -385,13 +398,8 @@ export class CompilationDataProvider {
                 const quickPick = vscode.window.createQuickPick()
                 quickPick.items = options
                 quickPick.onDidChangeSelection((selection) => {
-                    if (selection[0]) {
-                        this.snapshotSystems.forEach((system) => {
-                            if (system.label === selection[0].label) {
-                                this.compileAndPresent(system.id, system.snapshotSystem)
-                            }
-                        })
-                    }
+                    const system = pickedSystem(this.snapshotSystems, selection[0] as SystemQuickPickItem)
+                    if (system) this.compileAndPresent(system.id, system.snapshotSystem)
                     quickPick.hide()
                 })
                 quickPick.onDidHide(() => quickPick.dispose())
@@ -400,14 +408,9 @@ export class CompilationDataProvider {
         )
     }
 
+    /** Workspace systems (from .kico files) come first under their own heading, then the built-in ones. */
     createQuickPick(systems: CompilationSystem[]): vscode.QuickPickItem[] {
-        const quickPicks: vscode.QuickPickItem[] = []
-        systems.forEach((system) => {
-            quickPicks.push({
-                label: system.label,
-            })
-        })
-        return quickPicks
+        return groupSystemsForQuickPick(systems)
     }
 
     /**
@@ -499,6 +502,7 @@ export class CompilationDataProvider {
             return
         }
         const shown = this.shownStage.get(key) ?? -1
+        const slowest = slowestProcessor(results.processors)
         const items: (vscode.QuickPickItem & { index: number })[] = [
             {
                 label: `$(symbol-class) ${Utils.basename(vscode.Uri.parse(key))}`,
@@ -517,17 +521,23 @@ export class CompilationDataProvider {
                       : stage.infos?.length
                         ? '$(info) '
                         : ''
+                const timing = stageTiming(stage, slowest)
                 items.push({
                     label: `${problems}${groupName && stage.name !== groupName ? `${groupName} › ` : ''}${stage.name}`,
-                    description: `${index + 1}/${results.files.flat().length}${index === shown ? ' · shown' : ''}`,
+                    description: `${index + 1}/${results.files.flat().length}${timing ? ` · ${timing}` : ''}${
+                        index === shown ? ' · shown' : ''
+                    }`,
                     detail: stage.errors?.[0] ?? stage.warnings?.[0],
                     index,
                 })
                 index++
             })
         })
+        const total = results.totalMs !== undefined ? formatDuration(results.totalMs) : ''
         const choice = await vscode.window.showQuickPick(items, {
-            title: 'Show Compilation Stage',
+            title: `Show Compilation Stage${total ? ` · compiled in ${total}` : ''}${
+                slowest ? `, slowest ${slowest.name} ${formatDuration(slowest.durationMs)}` : ''
+            }`,
             placeHolder: 'Choose what the diagram preview shows',
             matchOnDescription: true,
         })
@@ -571,11 +581,7 @@ export class CompilationDataProvider {
     }
 
     async onDidChangeActiveTextEditor(editor: vscode.TextEditor | undefined): Promise<void> {
-        if (
-            editor &&
-            editor.document.uri.scheme === 'file' &&
-            ['sctx', 'scl', 'elkt', 'elkj', 'kgt', 'kgx', 'kviz', 'strl', 'lus'].includes(editor.document.languageId)
-        ) {
+        if (editor && editor.document.uri.scheme === 'file' && ['sctx', 'scl'].includes(editor.document.languageId)) {
             this.editor = editor
             this.sourceModelPath = editor.document.uri.toString()
             await this.requestSystemDescriptions()
@@ -701,7 +707,8 @@ export class CompilationDataProvider {
         uri: string,
         finished: boolean,
         currentIndex: number,
-        maxIndex: number
+        maxIndex: number,
+        currentProcessor?: ProcessorInfo
     ): Promise<void> {
         results ??= {
             files: [
@@ -748,12 +755,16 @@ export class CompilationDataProvider {
             await this.presentResult(uri, results, errorOccurred || this.cancellingCompilation)
 
             this.endTime = Date.now()
-            // Set finished bar if the currentIndex of the processor is the maxIndex the compilation was not canceled TODO
-            this.compilation.text =
-                currentIndex >= maxIndex && !errorOccurred
-                    ? `$(check) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
-                    : `$(times) (${(this.endTime - this.startTime).toPrecision(3)}ms)`
-            this.compilation.tooltip = currentIndex >= maxIndex ? 'Compilation finished' : 'Compilation stopped'
+            // The server's wall time covers exactly the processors; the client's own clock is the fallback.
+            const summary = finishedSummary({
+                success: currentIndex >= maxIndex && !errorOccurred,
+                cancelled: currentIndex < maxIndex && !errorOccurred,
+                totalMs: results.totalMs ?? this.endTime - this.startTime,
+                processors: results.processors,
+                processorCount: results.processorCount,
+            })
+            this.compilation.text = summary.text
+            this.compilation.tooltip = summary.tooltip
             if (errorOccurred && report?.status !== 'stale' && !this.generatingCode) {
                 const first = report?.issues.find((issue) => issue.severity === 'error')
                 vscode.window
@@ -770,14 +781,21 @@ export class CompilationDataProvider {
                     })
             }
         } else {
-            // Set progress bar for compilation TODO
-            const completed = Math.max(0, Math.min(40, Math.round((currentIndex / Math.max(1, maxIndex)) * 40)))
-            const progress = '█'.repeat(completed) + '░'.repeat(40 - completed)
-
+            // A snapshot names the processor that produced it; the next progress notification replaces this.
             this.compilation.show()
-            this.compilation.text = `$(spinner) ${progress}`
+            this.compilation.text = currentProcessor
+                ? progressText({ processor: currentProcessor, index: currentIndex, maxIndex })
+                : `$(spinner) Compiling (${Math.min(currentIndex, maxIndex)}/${maxIndex})`
             this.compilation.tooltip = 'Compiling...'
         }
+    }
+
+    /** The server announces every processor as it starts; the status bar shows which one is running. */
+    handleProgress(progress: CompileProgress): void {
+        if (!this.compiling) return
+        this.compilation.show()
+        this.compilation.text = progressText(progress)
+        this.compilation.tooltip = progressTooltip(progress)
     }
 
     /**
@@ -909,6 +927,16 @@ export class SnapshotDescription {
     warnings?: string[]
 
     infos?: string[]
+
+    /** Id of the processor that produced the snapshot. */
+    processorId?: string
+
+    /** Wall time of the processor stage in milliseconds; only on the snapshot a processor finished with. */
+    durationMs?: number
+
+    startedAtMs?: number
+
+    status?: 'ok' | 'warning' | 'error' | 'skipped' | 'cancelled'
 }
 
 export class CompilationSystem {
@@ -929,6 +957,9 @@ export class CompilationSystem {
     simulation: boolean
 
     snapshotSystem: boolean
+
+    /** File URI of the .kico this system was loaded from; absent for built-in systems. */
+    source?: string
 }
 
 export class CompilationSystemsMessage {
@@ -949,6 +980,11 @@ export interface CompilationResults {
     files: SnapshotDescription[][]
     generatedFiles?: GeneratedFile[]
     generationError?: string
+    /** Wall time of the whole compilation; only once it finished. */
+    totalMs?: number
+    processorCount?: number
+    /** Every processor of the system in execution order, including the ones that never ran. */
+    processors?: ProcessorTiming[]
 }
 
 // /**

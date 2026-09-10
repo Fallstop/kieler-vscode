@@ -22,10 +22,13 @@ import { Settings, settingsKey } from './constants'
 import { KeithErrorHandler } from './error-handler'
 import { reportConflictingExtensions } from './conflicts'
 import { DiagramController } from './diagram/diagram-controller'
+import { registerCursorSync } from './diagram/cursor-sync-registration'
 import { REQUEST_CS } from './kico/commands'
 import { CompilationDataProvider } from './kico/compilation-data-provider'
 import { DiagnosticBridge } from './kico/diagnostic-bridge'
 import { registerCodeGeneration } from './kico/code-generation'
+import { WorkspaceSystems } from './kico/workspace-systems'
+import { LiveDiagnostics, LiveDiagnosticsParam, liveDiagnosticsMethod } from './kico/live-diagnostics'
 import { handlePerformAction, PerformActionAction, performActionKind } from './perform-action-handler'
 import { RuntimeManager } from './runtime/runtime-manager'
 import { SettingsService } from './settings'
@@ -39,7 +42,7 @@ import { SimulationViewBridge } from './simulation/simulation-view-bridge'
  * The file ending should also be the language id, since it is also used to
  * register document selectors in the language client.
  */
-const supportedFileEndings = ['sctx', 'scl', 'elkt', 'elkj', 'kgt', 'kgx', 'kviz', 'strl', 'lus']
+const supportedFileEndings = ['sctx', 'scl', 'kico']
 
 let lsClient: LanguageClient
 let socket: Socket
@@ -156,16 +159,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         'simulationStepDelay',
         'simulationType',
         'showInternalVariables.enabled',
+        'liveDiagnostics.enabled',
+        'liveDiagnostics.debounceMs',
     ])
     context.subscriptions.push(settingsService)
 
     const compilationDataProvider = new CompilationDataProvider(lsClient, context, settingsService)
     registerCodeGeneration(context, compilationDataProvider)
+    // .kico files in the workspace define compilation systems of their own; the server loads them.
+    context.subscriptions.push(new WorkspaceSystems(lsClient))
     compilationDataProvider.awaitDiagram = () => diagrams.nextModel()
     context.subscriptions.push(
         new DiagnosticBridge(compilationDataProvider.diagnostics, diagrams, (uri, index) =>
             compilationDataProvider.show(uri, index)
         )
+    )
+    // The server analyses open SCCharts after every edit; the findings show as squiggles without a compile.
+    const liveDiagnostics = new LiveDiagnostics(lsClient, compilationDataProvider.diagnostics)
+    const liveConfiguration = () => ({
+        enabled: settingsService.get('liveDiagnostics.enabled') ?? true,
+        debounceMs: settingsService.get('liveDiagnostics.debounceMs') ?? 400,
+    })
+    context.subscriptions.push(
+        liveDiagnostics,
+        lsClient.onNotification(liveDiagnosticsMethod, (params: LiveDiagnosticsParam) =>
+            liveDiagnostics.accept(params)
+        ),
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (event.affectsConfiguration(`${settingsKey}.liveDiagnostics`))
+                liveDiagnostics.configure(liveConfiguration())
+        })
     )
     // Clicking the code view's text asks for an Eclipse editor; the generated code opens as tabs instead.
     diagrams.addActionHandler(performActionKind, (action) => {
@@ -178,6 +201,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(
         diagrams.onDidChangeDiagram(() => compilationDataProvider.diagramReset(diagrams.currentUri?.toString()))
     )
+    // The editor cursor follows into the diagram (and diagram selections back into the editor).
+    registerCursorSync(context, lsClient, diagrams)
 
     // The simulation lives in the diagram preview tab: controls above the diagram, the tick-by-tick trace below.
     const simulationDataProvider: SimulationTableDataProvider = new SimulationTableDataProvider(
@@ -212,6 +237,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                 return
             }
             serverStarts++
+            liveDiagnostics.configure(liveConfiguration())
             if (serverStarts > 1) {
                 vscode.commands.executeCommand(REQUEST_CS.command)
             }

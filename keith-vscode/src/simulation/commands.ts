@@ -71,19 +71,29 @@ export const LOAD_TRACE: vscode.Command = {
     title: 'Load trace',
 }
 
+export const STEP_BACK_SIMULATION: vscode.Command = {
+    command: 'keith-vscode.simulation-step-back',
+    title: 'Step back one tick',
+}
+
+export const RUN_TO_BREAKPOINT: vscode.Command = {
+    command: 'keith-vscode.simulation-run-to-breakpoint',
+    title: 'Run to breakpoint',
+}
+
+export const ADD_BREAKPOINT: vscode.Command = {
+    command: 'keith-vscode.simulation-add-breakpoint',
+    title: 'Add simulation breakpoint...',
+}
+
+export const ADD_WATCH: vscode.Command = {
+    command: 'keith-vscode.simulation-add-watch',
+    title: 'Add simulation watch expression...',
+}
+
 export const NEW_VALUE_SIMULATION: vscode.Command = {
     command: 'keith-vscode.simulation-new-value',
     title: 'New value for ...',
-}
-
-export const OPEN_INTERNAL_KVIZ_VIEW: vscode.Command = {
-    command: 'keith-vscode.open-kviz-internal',
-    title: 'Open KViz view in internal browser preview',
-}
-
-export const OPEN_EXTERNAL_KVIZ_VIEW: vscode.Command = {
-    command: 'keith-vscode.open-kviz-external',
-    title: 'Open KViz view in external browser',
 }
 
 export const ADD_CO_SIMULATION: vscode.Command = {

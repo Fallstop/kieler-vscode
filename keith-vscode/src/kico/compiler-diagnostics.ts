@@ -11,7 +11,7 @@ interface Stage {
 }
 
 /** A scheduler cycle error already explains the loop the analyzer warned about earlier in the pipeline. */
-function withoutExplainedLoops(issues: BuildIssue[]): BuildIssue[] {
+export function withoutExplainedLoops<T extends CompilerIssue>(issues: T[]): T[] {
     const explained = new Set(
         issues
             .filter((issue) => issue.code === 'scheduling-cycle')
@@ -143,18 +143,7 @@ export class CompilerDiagnostics implements vscode.Disposable {
                         stage: stage.name,
                         snapshotIndex: flatIndex,
                     }
-                    const symbols = new Set(
-                        issue.locations.flatMap((l) => l.label.match(/\b[A-Za-z_]\w*(?=\s*=(?!=))/g) ?? [])
-                    )
-                    if (issue.code === 'scheduling-cycle' && symbols.size)
-                        issue.message = `Circular dependency involving ${[...symbols].join(
-                            ', '
-                        )} prevents scheduling this tick.`
-                    // The server names the clocks of a timed loop itself; only its generic message is rephrased.
-                    if (issue.code === 'instantaneous-loop' && !/^Potential instantaneous loop/.test(issue.message))
-                        issue.message = symbols.size
-                            ? `Potential instantaneous loop through ${[...symbols].join(', ')}.`
-                            : 'Potential instantaneous loop.'
+                    // Messages arrive final from the analyzer that found the problem; nothing is rephrased here.
                     if (
                         !issues.some(
                             (other) =>
@@ -216,84 +205,14 @@ export class CompilerDiagnostics implements vscode.Disposable {
     }
 
     range(location: SourceLocation, document: vscode.TextDocument): vscode.Range {
-        if ((location.line ?? -1) >= 0) {
-            const line = Math.min(location.line!, document.lineCount - 1)
-            const { text } = document.lineAt(line)
-            const column = Buffer.from(text, 'utf8')
-                .subarray(0, Math.max(0, location.column ?? 0))
-                .toString('utf8').length
-            return document.validateRange(new vscode.Range(line, column, line, column + 1))
-        }
-        return new vscode.Range(
-            document.positionAt(location.offset),
-            document.positionAt(location.offset + Math.max(1, location.length))
-        )
+        return rangeOf(location, document)
     }
 
     private publish(report: BuildReport): void {
         const source = this.sources.get(report.id) ?? ''
         const document = vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === report.uri)
         if (!document || document.version !== report.version) return
-        const byFile = new Map<string, vscode.Diagnostic[]>()
-        report.issues.forEach((issue) => {
-            const known = issue.locations.filter((location) => vscode.Uri.parse(location.uri).scheme === 'file')
-            const locations = known.length
-                ? known
-                : [
-                      {
-                          uri: report.uri,
-                          offset: 0,
-                          length: Math.min(1, source.length),
-                          label:
-                              issue.severity === 'error'
-                                  ? 'Build failed in this stage'
-                                  : 'Reported by this compiler stage',
-                      },
-                  ]
-            // Prefer source locations; generated C remains a related link when it maps back to SCTX.
-            const primary = locations.filter((l) => l.uri === report.uri)
-            const targets = primary.length ? primary : locations.slice(0, 1)
-            targets.forEach((location) => {
-                const range =
-                    location.uri === report.uri
-                        ? this.range(location, document)
-                        : new vscode.Range(
-                              Math.max(0, location.line ?? 0),
-                              Math.max(0, location.column ?? 0),
-                              Math.max(0, location.line ?? 0),
-                              Math.max(0, location.column ?? 0) + 1
-                          )
-                const diagnostic = new vscode.Diagnostic(
-                    range,
-                    `${issue.message}${issue.hint ? `\n${issue.hint}` : ''}`,
-                    issue.severity === 'error' ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning
-                )
-                diagnostic.source = `KIELER · ${issue.stage}`
-                diagnostic.code = issue.code
-                diagnostic.relatedInformation = locations
-                    .filter((l) => l !== location)
-                    .map(
-                        (related) =>
-                            new vscode.DiagnosticRelatedInformation(
-                                new vscode.Location(
-                                    vscode.Uri.parse(related.uri),
-                                    related.uri === report.uri
-                                        ? this.range(related, document)
-                                        : new vscode.Range(
-                                              Math.max(0, related.line ?? 0),
-                                              Math.max(0, related.column ?? 0),
-                                              Math.max(0, related.line ?? 0),
-                                              Math.max(0, related.column ?? 0) + 1
-                                          )
-                                ),
-                                related.label
-                            )
-                    )
-                const list = byFile.get(location.uri) ?? []
-                list.push(diagnostic)
-                byFile.set(location.uri, list)
-            })
-        })
+        const byFile = renderIssues(report.issues, report.uri, document, source, (issue) => `KIELER · ${issue.stage}`)
         this.clearPublished(report.uri)
         byFile.forEach((diagnostics, uri) => this.collection.set(vscode.Uri.parse(uri), diagnostics))
         this.published.set(report.uri, new Set(byFile.keys()))
@@ -320,4 +239,84 @@ export class CompilerDiagnostics implements vscode.Disposable {
             return [action]
         })
     }
+}
+
+/** The editor range of a source location: a generated-file line/column, or an offset into the SCTX document. */
+export function rangeOf(location: SourceLocation, document: vscode.TextDocument): vscode.Range {
+    if ((location.line ?? -1) >= 0) {
+        const line = Math.min(location.line!, document.lineCount - 1)
+        const { text } = document.lineAt(line)
+        const column = Buffer.from(text, 'utf8')
+            .subarray(0, Math.max(0, location.column ?? 0))
+            .toString('utf8').length
+        return document.validateRange(new vscode.Range(line, column, line, column + 1))
+    }
+    return new vscode.Range(
+        document.positionAt(location.offset),
+        document.positionAt(location.offset + Math.max(1, location.length))
+    )
+}
+
+function rangeIn(location: SourceLocation, modelUri: string, document: vscode.TextDocument): vscode.Range {
+    return location.uri === modelUri
+        ? rangeOf(location, document)
+        : new vscode.Range(
+              Math.max(0, location.line ?? 0),
+              Math.max(0, location.column ?? 0),
+              Math.max(0, location.line ?? 0),
+              Math.max(0, location.column ?? 0) + 1
+          )
+}
+
+/**
+ * Turns issues into VS Code diagnostics grouped by file. Issues without a file location are pinned to the start of
+ * the model; generated C stays a related link when it maps back to SCTX. Shared by the compile and the live path.
+ */
+export function renderIssues<T extends CompilerIssue>(
+    issues: T[],
+    modelUri: string,
+    document: vscode.TextDocument,
+    source: string,
+    sourceLabel: (issue: T) => string
+): Map<string, vscode.Diagnostic[]> {
+    const byFile = new Map<string, vscode.Diagnostic[]>()
+    issues.forEach((issue) => {
+        const known = issue.locations.filter((location) => vscode.Uri.parse(location.uri).scheme === 'file')
+        const locations = known.length
+            ? known
+            : [
+                  {
+                      uri: modelUri,
+                      offset: 0,
+                      length: Math.min(1, source.length),
+                      label:
+                          issue.severity === 'error' ? 'Build failed in this stage' : 'Reported by this compiler stage',
+                  },
+              ]
+        // Prefer source locations; generated C remains a related link when it maps back to SCTX.
+        const primary = locations.filter((l) => l.uri === modelUri)
+        const targets = primary.length ? primary : locations.slice(0, 1)
+        targets.forEach((location) => {
+            const diagnostic = new vscode.Diagnostic(
+                rangeIn(location, modelUri, document),
+                `${issue.message}${issue.hint ? `\n${issue.hint}` : ''}`,
+                issue.severity === 'error' ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning
+            )
+            diagnostic.source = sourceLabel(issue)
+            diagnostic.code = issue.code
+            diagnostic.relatedInformation = locations
+                .filter((l) => l !== location)
+                .map(
+                    (related) =>
+                        new vscode.DiagnosticRelatedInformation(
+                            new vscode.Location(vscode.Uri.parse(related.uri), rangeIn(related, modelUri, document)),
+                            related.label
+                        )
+                )
+            const list = byFile.get(location.uri) ?? []
+            list.push(diagnostic)
+            byFile.set(location.uri, list)
+        })
+    })
+    return byFile
 }

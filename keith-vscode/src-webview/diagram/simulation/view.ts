@@ -30,6 +30,7 @@ import { NumberFormat, isNumberFormat, nextFormat } from './format'
 import { renderSummary } from './summary'
 import { Timeline } from './timeline'
 import { Toolbar } from './toolbar'
+import { BreakpointPanel, WatchPanel, renderPauseNotice } from './debug'
 
 const DRAWER_KEY = 'keith.simulation.drawer'
 const DRAWER_HEIGHT_KEY = 'keith.simulation.drawerHeight'
@@ -79,7 +80,13 @@ export class SimulationView {
 
     private readonly summary = h('div.kv-summary-host')
 
+    private readonly notice = h('div.kv-notice-host')
+
     private readonly toolbar: Toolbar
+
+    private readonly breakpoints: BreakpointPanel
+
+    private readonly watches: WatchPanel
 
     private readonly timeline: Timeline
 
@@ -91,10 +98,17 @@ export class SimulationView {
     private readonly formats = readFormats()
 
     constructor(private readonly messenger: Messenger) {
+        this.breakpoints = new BreakpointPanel((command) => this.send(command))
+        this.watches = new WatchPanel((command) => this.send(command))
         this.toolbar = new Toolbar({
             send: (command) => this.send(command),
             toggleDrawer: () => this.setDrawer(!this.drawerOpen),
             drawerOpen: () => this.drawerOpen,
+            toggleBreakpoints: () => {
+                this.breakpoints.toggle()
+                if (this.state) this.toolbar.render(this.state)
+            },
+            breakpointsOpen: () => this.breakpoints.isOpen(),
         })
         this.timeline = new Timeline((command) => this.send(command), {
             get: (id) => this.formatFor(id),
@@ -157,10 +171,10 @@ export class SimulationView {
             },
             onmousedown: (event) => this.startResize(event as MouseEvent),
         })
-        replaceChildren(this.drawer, handle, this.summary, this.timeline.el)
+        replaceChildren(this.drawer, handle, this.summary, this.notice, this.watches.el, this.timeline.el)
         this.resizeDrawer(Number(readSetting(DRAWER_HEIGHT_KEY, '220')))
 
-        replaceChildren(this.root, this.toolbar.el, container, this.drawer)
+        replaceChildren(this.root, this.toolbar.el, this.breakpoints.el, container, this.drawer)
         document.body.insertBefore(this.root, document.body.firstChild)
         // Only klighd's sidebar reads this offset; feeding the measured height back into the
         // toolbar's own height would grow it by its border on every cycle.
@@ -196,6 +210,7 @@ export class SimulationView {
         }
         this.state = state
         this.toolbar.render(state)
+        this.breakpoints.render(state.phase === 'running' ? state.debug : undefined)
         const showDrawer = state.phase === 'running' && this.drawerOpen
         this.drawer.hidden = !showDrawer
         if (showDrawer) {
@@ -203,6 +218,8 @@ export class SimulationView {
                 this.summary,
                 renderSummary(state, (id) => this.formatFor(id))
             )
+            replaceChildren(this.notice, renderPauseNotice(state.debug))
+            this.watches.render(state.debug)
             this.timeline.render(state)
         }
     }
@@ -261,12 +278,20 @@ export class SimulationView {
         if (!this.state || this.state.phase !== 'running' || event.ctrlKey || event.metaKey || event.altKey) {
             return
         }
+        const busy = this.state.playing || !!this.state.debug?.runningToBreakpoint
         if (event.code === 'Space') {
             event.preventDefault()
-            if (!this.state.playing) this.send({ kind: 'step' })
+            if (!busy) this.send({ kind: 'step' })
         } else if (event.key === 'r' || event.key === 'R') {
             event.preventDefault()
             this.send({ kind: this.state.playing ? 'pause' : 'play' })
+        } else if (event.key === 'Backspace') {
+            event.preventDefault()
+            if (!busy && this.state.debug?.canStepBack) this.send({ kind: 'stepBack' })
+        } else if (event.key === 'c' || event.key === 'C') {
+            event.preventDefault()
+            if (this.state.debug?.runningToBreakpoint) this.send({ kind: 'pause' })
+            else if (!busy) this.send({ kind: 'runToBreakpoint' })
         }
     }
 }

@@ -10,6 +10,7 @@
 
 import { ChildProcess, spawn } from 'child_process'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 import * as vscode from 'vscode'
 import { settingsKey } from '../constants'
@@ -30,12 +31,17 @@ import {
     JavaRuntime,
     REQUIRED_JAVA,
 } from './java-runtime'
+import { archiveKey, JVM_LOGGING_ARGS, LaunchPlan, StartupCache } from './startup-cache'
 
 export const JAVA_HOME_SETTING = 'javaHome'
 export const C_COMPILER_SETTING = 'cCompilerPath'
 export const DOWNLOAD_C_TOOLCHAIN = 'keith-vscode.runtime.downloadCToolchain'
 export const REMOVE_C_TOOLCHAIN = 'keith-vscode.runtime.removeCToolchain'
 export const SHOW_RUNTIME_INFO = 'keith-vscode.runtime.showInfo'
+export const CLEAR_STARTUP_CACHE = 'keith-vscode.runtime.clearStartupCache'
+export const STARTUP_CACHE_SETTING = 'startupCache.enabled'
+/** Class-data-sharing archives live below the global storage, one directory per jar and runtime. */
+export const STARTUP_CACHE_DIRECTORY = 'cds'
 const DECLINED_DOWNLOAD_KEY = 'runtime.cToolchain.declined'
 const JAVA_DOWNLOAD_URL = `https://adoptium.net/temurin/releases/?version=${REQUIRED_JAVA}`
 
@@ -76,7 +82,8 @@ export class RuntimeManager implements vscode.Disposable {
             this.output,
             vscode.commands.registerCommand(DOWNLOAD_C_TOOLCHAIN, () => this.downloadCToolchain()),
             vscode.commands.registerCommand(REMOVE_C_TOOLCHAIN, () => this.removeCToolchain()),
-            vscode.commands.registerCommand(SHOW_RUNTIME_INFO, () => this.showInfo())
+            vscode.commands.registerCommand(SHOW_RUNTIME_INFO, () => this.showInfo()),
+            vscode.commands.registerCommand(CLEAR_STARTUP_CACHE, () => this.clearStartupCache())
         )
     }
 
@@ -176,7 +183,12 @@ export class RuntimeManager implements vscode.Disposable {
         if (!java) {
             throw new Error(`No Java ${REQUIRED_JAVA} runtime is available to start the SCCharts language server.`)
         }
-        const args = ['-Djava.awt.headless=true']
+        // JVM options, chosen with scripts/measure-startup.cjs on the bundled Temurin 21 image (medians of
+        // five starts): the AppCDS archive the startup cache adds below takes `initialize` from 1533 to
+        // 993 ms and the first compilation systems from 2578 to 1815 ms. -XX:TieredStopAtLevel=1 would
+        // start another 150 ms sooner but warm compiles settle at 240 ms instead of 142 ms; -Xss512k,
+        // Serial/Parallel GC, -XX:CICompilerCount=2 and -Xmx2g were within noise. So nothing else.
+        const args = ['-Djava.awt.headless=true', ...JVM_LOGGING_ARGS]
         const pathEntries: string[] = []
         const compiler = this.cCompiler()
         if (compiler && compiler.source !== 'PATH') {
@@ -187,17 +199,113 @@ export class RuntimeManager implements vscode.Disposable {
             // The server spawns java/javac/jar itself for the Java simulation; make sure they are ours.
             pathEntries.push(path.join(java.home, 'bin'))
         }
-        args.push('-cp', this.context.asAbsolutePath(SERVER_JAR), SERVER_MAIN)
+        const jar = this.context.asAbsolutePath(SERVER_JAR)
+        const cache = this.startupCache(java, jar)
+        const plan = cache?.launchArguments()
+        if (plan) args.push(...plan.args)
+        args.push('-cp', jar, SERVER_MAIN)
         this.output.appendLine(
             `Starting language server: ${java.command} ${args.join(' ')}${
                 compiler ? ` (C compiler: ${compiler.command}, ${compiler.source})` : ' (no C compiler found yet)'
             }`
         )
-        return spawn(java.command, args, {
+        if (plan) this.output.appendLine(`Startup cache: ${describeCacheState(plan.state)} (${cache!.directory})`)
+        const started = Date.now()
+        const server = spawn(java.command, args, {
             env: serverEnvironment(process.env, pathEntries),
             cwd: this.context.extensionPath,
             windowsHide: true,
         })
+        if (cache && plan) {
+            // The class list is complete once the server exits; that is when the archive gets dumped.
+            server.once('close', (code, signal) => {
+                if (cache.handleExit(plan, code, signal, Date.now() - started)) {
+                    this.output.appendLine(
+                        `Startup cache: the server exited with ${
+                            code ?? signal
+                        } right after starting with the archive; the archive was deleted and will not be rebuilt for this server build.`
+                    )
+                    return
+                }
+                this.dumpArchive(cache, java, jar)
+            })
+            // A class list from a session whose window closed before the dump ran is turned into the archive now.
+            this.dumpArchive(cache, java, jar)
+        }
+        return server
+    }
+
+    /** The archive cache for this jar and runtime, or undefined when the setting turns it off. */
+    private startupCache(java: JavaRuntime, jar: string): StartupCache | undefined {
+        if (this.settings.get<boolean>(STARTUP_CACHE_SETTING) === false) return undefined
+        try {
+            const key = archiveKey(jar, java)
+            const cache = new StartupCache(
+                path.join(this.context.globalStorageUri.fsPath, STARTUP_CACHE_DIRECTORY),
+                key
+            )
+            for (const stale of cache.removeOthers()) {
+                this.output.appendLine(`Startup cache: removed the archive of a previous server build (${stale})`)
+            }
+            return cache
+        } catch (error) {
+            this.output.appendLine(`Startup cache unavailable: ${error instanceof Error ? error.message : error}`)
+            return undefined
+        }
+    }
+
+    /**
+     * Turns the recorded class list into the archive in a detached, low-priority `java -Xshare:dump`
+     * (a few seconds), so the next server start maps it. Does nothing unless a list is waiting.
+     */
+    private dumpArchive(cache: StartupCache, java: JavaRuntime, jar: string): void {
+        if (!cache.needsDump()) return
+        cache.beginDump()
+        const args = [...JVM_LOGGING_ARGS, ...cache.dumpArguments(jar)]
+        this.output.appendLine(`Startup cache: building the class-data archive: ${java.command} ${args.join(' ')}`)
+        let log: number | 'ignore' = 'ignore'
+        try {
+            log = fs.openSync(cache.dumpLog, 'w')
+        } catch {
+            // The log is a diagnostic aid only.
+        }
+        const dump = spawn(java.command, args, {
+            cwd: this.context.extensionPath,
+            detached: true,
+            stdio: ['ignore', log, log],
+            windowsHide: true,
+        })
+        if (typeof log === 'number') fs.closeSync(log)
+        try {
+            if (dump.pid) os.setPriority(dump.pid, 10)
+        } catch {
+            // Not fatal: the dump merely competes with the starting server for a few seconds.
+        }
+        dump.once('exit', (code, signal) => {
+            const succeeded = code === 0
+            cache.completeDump(succeeded)
+            this.output.appendLine(
+                succeeded
+                    ? `Startup cache: archive ready at ${cache.archive}; the next server start uses it`
+                    : `Startup cache: java -Xshare:dump exited with ${
+                          code ?? signal
+                      }; the server keeps starting without an archive (see ${cache.dumpLog})`
+            )
+        })
+        dump.unref()
+    }
+
+    /** Command: delete every archive; it is rebuilt over the next two server starts. */
+    async clearStartupCache(): Promise<void> {
+        const root = path.join(this.context.globalStorageUri.fsPath, STARTUP_CACHE_DIRECTORY)
+        StartupCache.clear(root)
+        this.output.appendLine(`Startup cache cleared (${root})`)
+        const restart = 'Restart server'
+        const choice = await vscode.window.showInformationMessage(
+            'The startup cache was cleared. It is rebuilt over the next two language server starts.',
+            restart
+        )
+        if (choice === restart && this.restartServer) await this.restartServer()
     }
 
     /**
@@ -359,6 +467,25 @@ export class RuntimeManager implements vscode.Disposable {
                     : 'w64devkit: not downloaded'
             )
         }
+        const cache = java ? this.startupCache(java, this.context.asAbsolutePath(SERVER_JAR)) : undefined
+        this.output.appendLine(
+            cache
+                ? `Startup cache: ${describeCacheState(cache.state())} (${cache.directory})`
+                : `Startup cache: off (${settingsKey}.${STARTUP_CACHE_SETTING})`
+        )
         this.output.show()
+    }
+}
+
+function describeCacheState(state: LaunchPlan['state']): string {
+    switch (state) {
+        case 'archive':
+            return 'using the class-data archive'
+        case 'classlist':
+            return 'class list recorded, archive not built yet'
+        case 'empty':
+            return 'recording the class list; the archive is built when this server exits'
+        default:
+            return 'disabled for this server build because the archive could not be built or crashed'
     }
 }

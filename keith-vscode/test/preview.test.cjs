@@ -29,6 +29,7 @@ function setup(t) {
         rebuildSimulation: async () => executed.push(['rebuild']),
         setInputValue: () => executed.push(['setInput']),
         kico: { onDidChangeStage: changed.subscribe, currentStage: () => undefined },
+        debugger: { state: () => undefined, runningToBreakpoint: false, pause: async () => executed.push(['pause']) },
     }
     const diagrams = {
         currentUri: URI.parse(first),
@@ -83,7 +84,7 @@ test('errors stay with their source file and URI matching handles encoded filena
 test('preview commands cannot control a run belonging to a different file', (t) => {
     const { diagrams, receive, executed } = setup(t)
     diagrams.currentUri = URI.parse(second)
-    for (const kind of ['step', 'play', 'pause', 'stop', 'restart', 'saveTrace', 'loadTrace', 'openExternal', 'setInput']) {
+    for (const kind of ['step', 'play', 'pause', 'stop', 'restart', 'saveTrace', 'loadTrace', 'setInput']) {
         receive({ kind, modelUri: first, id: 'input', value: 9 })
         receive({ kind, modelUri: second, id: 'input', value: 9 })
     }

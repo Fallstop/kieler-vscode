@@ -2,7 +2,7 @@
   "name": "sccharts-lab",
   "displayName": "SCCharts Lab",
   "description": "Edit, visualise, simulate tick by tick, and debug SCCharts models in VS Code. Independent fork of the KIELER VS Code extension (keith-vscode).",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "publisher": "qinnovate",
   "author": "Jasper Miller-Waugh",
   "contributors": [
@@ -35,93 +35,11 @@
   "activationEvents": [
     "onLanguage:sctx",
     "onLanguage:scl",
-    "onLanguage:elkt",
-    "onLanguage:elkj",
-    "onLanguage:kgt",
-    "onLanguage:kgx",
-    "onLanguage:kviz",
-    "onLanguage:strl",
-    "onLanguage:lus"
+    "onLanguage:kico"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [
-      {
-        "id": "kgt",
-        "aliases": [
-          "KGraph",
-          "kgt"
-        ],
-        "extensions": [
-          "kgt"
-        ],
-        "configuration": "./configurations/language-configuration.json"
-      },
-      {
-        "id": "kgx",
-        "aliases": [
-          "KGraph",
-          "kgx"
-        ],
-        "extensions": [
-          "kgx"
-        ],
-        "configuration": "./configurations/language-configuration.json"
-      },
-      {
-        "id": "elkt",
-        "aliases": [
-          "Elk Graph",
-          "elkt"
-        ],
-        "extensions": [
-          "elkt"
-        ],
-        "configuration": "./configurations/language-configuration.json"
-      },
-      {
-        "id": "elkj",
-        "aliases": [
-          "Elk Graph",
-          "elkj"
-        ],
-        "extensions": [
-          "elkj"
-        ]
-      },
-      {
-        "id": "strl",
-        "aliases": [
-          "Esterel",
-          "strl"
-        ],
-        "extensions": [
-          "strl"
-        ],
-        "configuration": "./configurations/strl-language-configuration.json"
-      },
-      {
-        "id": "kviz",
-        "aliases": [
-          "KiVis",
-          "kviz"
-        ],
-        "extensions": [
-          "kviz"
-        ],
-        "configuration": "./configurations/language-configuration.json"
-      },
-      {
-        "id": "lus",
-        "aliases": [
-          "Lustre",
-          "lus"
-        ],
-        "extensions": [
-          "lus"
-        ],
-        "configuration": "./configurations/language-configuration.json"
-      },
       {
         "id": "sctx",
         "aliases": [
@@ -143,34 +61,20 @@
           "scl"
         ],
         "configuration": "./configurations/language-configuration.json"
+      },
+      {
+        "id": "kico",
+        "aliases": [
+          "KiCo compilation system",
+          "kico"
+        ],
+        "extensions": [
+          "kico"
+        ],
+        "configuration": "./configurations/language-configuration.json"
       }
     ],
     "grammars": [
-      {
-        "language": "kgt",
-        "scopeName": "text.kgt",
-        "path": "./syntaxes/kgt.tmLanguage.json"
-      },
-      {
-        "language": "elkt",
-        "scopeName": "text.elkt",
-        "path": "./syntaxes/elkt.tmLanguage.json"
-      },
-      {
-        "language": "strl",
-        "scopeName": "text.strl",
-        "path": "./syntaxes/strl.tmLanguage.json"
-      },
-      {
-        "language": "kviz",
-        "scopeName": "text.kviz",
-        "path": "./syntaxes/kviz.tmLanguage.json"
-      },
-      {
-        "language": "lus",
-        "scopeName": "text.lus",
-        "path": "./syntaxes/lus.tmLanguage.json"
-      },
       {
         "language": "sctx",
         "scopeName": "text.sctx",
@@ -187,6 +91,12 @@
         "command": "keith-vscode.compile",
         "title": "Compile current model with...",
         "icon": "$(server-process)",
+        "category": "KiCo"
+      },
+      {
+        "command": "keith-vscode.kico.newSystem",
+        "title": "New compilation system (.kico) in workspace",
+        "icon": "$(new-file)",
         "category": "KiCo"
       },
       {
@@ -258,12 +168,6 @@
         "category": "Simulation"
       },
       {
-        "command": "keith-vscode.open-kviz-external",
-        "title": "Open KIELER visualization in browser",
-        "category": "Simulation",
-        "icon": "$(preview)"
-      },
-      {
         "command": "keith-vscode.simulation-stop",
         "title": "Stop simulation",
         "category": "Simulation",
@@ -307,6 +211,30 @@
         "command": "keith-vscode.simulation-load-trace",
         "title": "Load trace",
         "category": "Simulation"
+      },
+      {
+        "command": "keith-vscode.simulation-step-back",
+        "title": "Step back one tick",
+        "category": "Simulation",
+        "icon": "$(debug-step-back)"
+      },
+      {
+        "command": "keith-vscode.simulation-run-to-breakpoint",
+        "title": "Run to breakpoint",
+        "category": "Simulation",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "keith-vscode.simulation-add-breakpoint",
+        "title": "Add simulation breakpoint...",
+        "category": "Simulation",
+        "icon": "$(debug-breakpoint-conditional)"
+      },
+      {
+        "command": "keith-vscode.simulation-add-watch",
+        "title": "Add simulation watch expression...",
+        "category": "Simulation",
+        "icon": "$(eye)"
       },
       {
         "command": "keith-vscode.simulation-step-delay",
@@ -395,6 +323,12 @@
         "category": "KIELER Diagram"
       },
       {
+        "command": "keith-vscode.diagram.revealCursor",
+        "title": "Reveal Cursor in Diagram",
+        "icon": "$(target)",
+        "category": "KIELER Diagram"
+      },
+      {
         "command": "keith-vscode.generate-code",
         "title": "Generate Code...",
         "category": "SCCharts",
@@ -425,6 +359,11 @@
       {
         "command": "keith-vscode.runtime.removeCToolchain",
         "title": "Remove downloaded C toolchain",
+        "category": "SCCharts Lab"
+      },
+      {
+        "command": "keith-vscode.runtime.clearStartupCache",
+        "title": "Clear language server startup cache",
         "category": "SCCharts Lab"
       }
     ],
@@ -511,7 +450,19 @@
           "when": "keith.vscode:simulationRunning"
         },
         {
-          "command": "keith-vscode.open-kviz-external",
+          "command": "keith-vscode.simulation-step-back",
+          "when": "keith.vscode:simulationRunning"
+        },
+        {
+          "command": "keith-vscode.simulation-run-to-breakpoint",
+          "when": "keith.vscode:simulationRunning"
+        },
+        {
+          "command": "keith-vscode.simulation-add-breakpoint",
+          "when": "keith.vscode:simulationRunning"
+        },
+        {
+          "command": "keith-vscode.simulation-add-watch",
           "when": "keith.vscode:simulationRunning"
         },
         {
@@ -576,6 +527,9 @@
         {
           "command": "keith-vscode.runtime.removeCToolchain",
           "when": "isWindows"
+        },
+        {
+          "command": "keith-vscode.runtime.clearStartupCache"
         }
       ],
       "editor/title": [
@@ -680,6 +634,21 @@
           "when": "resourceLangId in keith-vscode.languages",
           "command": "keith-vscode.diagram.open",
           "group": "navigation"
+        },
+        {
+          "when": "resourceLangId == sctx && keith-vscode.diagramOpen",
+          "command": "keith-vscode.diagram.revealCursor",
+          "group": "navigation"
+        },
+        {
+          "when": "resourceLangId == sctx && keith.vscode:simulationRunning",
+          "command": "keith-vscode.simulation-add-breakpoint",
+          "group": "simulation@1"
+        },
+        {
+          "when": "resourceLangId == sctx && keith.vscode:simulationRunning",
+          "command": "keith-vscode.simulation-add-watch",
+          "group": "simulation@2"
         }
       ],
       "explorer/context": [
@@ -739,6 +708,17 @@
           "default": false,
           "description": "Specifies whether internal variables shall be shown in the simulation widget (e.g. guards, ...)."
         },
+        "keith-vscode.liveDiagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyse SCCharts while typing: scheduling cycles, instantaneous loops and other compiler findings appear as squiggles without compiling."
+        },
+        "keith-vscode.liveDiagnostics.debounceMs": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 400,
+          "description": "How long to wait after the last edit before the live analysis runs, in milliseconds."
+        },
         "keith-vscode.diagramColorTheme": {
           "type": "string",
           "default": "light",
@@ -758,11 +738,46 @@
           "scope": "machine-overridable",
           "markdownDescription": "Java installation (JDK or JRE, version 21 or newer) to run the SCCharts language server with. Leave empty to use the runtime bundled with platform builds of the extension, then `JDK_HOME`, `JAVA_HOME` and finally `java` on PATH. Java simulation needs a JDK here because it compiles with `javac`. Takes effect on the next server restart or window reload."
         },
+        "keith-vscode.diagram.followCursor": {
+          "type": "string",
+          "enum": [
+            "off",
+            "focus",
+            "expand"
+          ],
+          "enumDescriptions": [
+            "The diagram does not follow the editor cursor.",
+            "Expand the regions around the cursor and select the state, region or transition under it.",
+            "Additionally collapse the regions the cursor is not in, unless you expanded them yourself and \"Remember Collapsed/Expanded Regions\" is on."
+          ],
+          "default": "focus",
+          "description": "Follow the editor cursor in the open diagram of the same SCChart (the Eclipse editor's smart collapse). The command \"Reveal Cursor in Diagram\" does this once, even when off."
+        },
+        "keith-vscode.diagram.selectText": {
+          "type": "boolean",
+          "default": true,
+          "description": "Selecting a state, region or transition in the diagram selects its text in the open editor."
+        },
         "keith-vscode.cCompilerPath": {
           "type": "string",
           "default": "",
           "scope": "machine-overridable",
           "markdownDescription": "C compiler for C simulation and code checks, as a full path or a program name on PATH (GCC-compatible command line). Leave empty to use the toolchain downloaded by SCCharts Lab on Windows, or `gcc` on PATH. Takes effect on the next server restart."
+        },
+        "keith-vscode.compilationSystems.folders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "markdownDescription": "Extra directories scanned for `.kico` compilation systems, absolute or relative to each workspace folder, in addition to the workspace itself (every `.kico` in the workspace outside build and dependency folders is loaded automatically). Systems from these files appear in **Compile current model with...** and take effect as soon as the file is saved."
+        },
+        "keith-vscode.startupCache.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine-overridable",
+          "markdownDescription": "Start the language server from a class-data-sharing archive (AppCDS). The archive is built on this machine over the first two server starts and cuts the following starts by about a third. Turn off if a JVM crash at start points at the archive; \"Clear language server startup cache\" rebuilds it."
         }
       }
     },
@@ -804,7 +819,7 @@
     "lint": "eslint .",
     "lint-fix": "eslint --fix .",
     "test": "node --test test/*.test.cjs",
-    "test:server": "node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs && node test/server-highlight.cjs",
+    "test:server": "node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs && node test/server-live-diagnostics.cjs && node test/server-highlight.cjs && node test/server-cursor-sync.cjs && node test/server-compile-ide.cjs && node test/server-startup.cjs && node test/server-simulation-debug.cjs && node test/server-workspace-kico.cjs",
     "build": "webpack --mode production",
     "watch": "webpack --watch",
     "package": "node scripts/package-extension.cjs",

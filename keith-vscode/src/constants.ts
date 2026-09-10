@@ -44,4 +44,12 @@ export type Settings = {
      * Show internal variables of simulation (e.g. guards, ...).
      */
     'showInternalVariables.enabled': boolean
+    /**
+     * Analyse open SCCharts while typing and show the findings as squiggles.
+     */
+    'liveDiagnostics.enabled': boolean
+    /**
+     * Milliseconds the server waits after the last edit before analysing.
+     */
+    'liveDiagnostics.debounceMs': number
 }

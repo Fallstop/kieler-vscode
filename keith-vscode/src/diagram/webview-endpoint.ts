@@ -29,6 +29,8 @@ type ActionHandler = (action: Action) => unknown
 export interface KlighDWebviewEndpointOptions extends LspWebviewEndpointOptions {
     /** Called whenever the server delivers a new diagram model to this webview. */
     onModelReceived?: () => void
+    /** Called whenever the webview sends a diagram action to the server, i.e. the user acts on the diagram. */
+    onActionSent?: (kind: string) => void
 }
 
 /**
@@ -42,10 +44,13 @@ export class KlighDWebviewEndpoint extends WebviewEndpoint {
 
     private readonly onModelReceived?: () => void
 
+    private readonly onActionSent?: (kind: string) => void
+
     constructor(options: KlighDWebviewEndpointOptions) {
         super(options)
         this.languageClient = options.languageClient
         this.onModelReceived = options.onModelReceived
+        this.onActionSent = options.onActionSent
     }
 
     override async sendAction(action: Action | ActionMessage): Promise<void> {
@@ -95,6 +100,7 @@ export class KlighDWebviewEndpoint extends WebviewEndpoint {
                     // Catch any diagram/accept action and call the registered action handlers.
                     if (notification.method === 'diagram/accept' && isActionMessage(notification.params)) {
                         const { action } = notification.params
+                        this.onActionSent?.(action.kind)
                         const handlers = this.klighdActionHandlers.get(notification.params.action.kind)
                         if (handlers) {
                             const results = await Promise.all(

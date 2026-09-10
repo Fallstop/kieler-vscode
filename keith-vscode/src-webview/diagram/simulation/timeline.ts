@@ -87,13 +87,43 @@ export class Timeline {
             h('th.kv-col-name', {}, 'Variable'),
             h('th.kv-col-next', { title: 'What the model will read at the next tick' }, 'Next'),
             elided && h('th.kv-col-more', { title: `Ticks 1 to ${state.firstTick - 1} are no longer shown` }, '…'),
-            ...ticks.map((tick) =>
-                h(
-                    `th.kv-col-tick${tick === state.tick ? '.kv-latest' : ''}`,
-                    { title: `After tick ${tick}` },
+            ...ticks.map((tick) => {
+                const hit = state.debug?.paused?.step === tick
+                const canRewind = !!state.debug?.canStepBack && tick < state.tick && !state.playing
+                const classes = [
+                    'kv-col-tick',
+                    tick === state.tick ? 'kv-latest' : '',
+                    hit ? 'kv-hit' : '',
+                    canRewind ? 'kv-rewindable' : '',
+                ]
+                    .filter(Boolean)
+                    .join('.')
+                let title = `After tick ${tick}`
+                if (hit) title += ` (paused here: ${state.debug?.paused?.label})`
+                if (canRewind) title += '. Click to rewind the simulation to this tick.'
+                return h(
+                    `th.${classes}`,
+                    {
+                        title,
+                        role: canRewind ? 'button' : undefined,
+                        tabindex: canRewind ? 0 : undefined,
+                        'data-control': canRewind ? `tick:${tick}` : undefined,
+                        onclick: canRewind ? () => this.send({ kind: 'stepBack', toStep: tick }) : undefined,
+                        onkeydown: canRewind
+                            ? (event) => {
+                                  if (
+                                      (event as KeyboardEvent).key === 'Enter' ||
+                                      (event as KeyboardEvent).key === ' '
+                                  ) {
+                                      event.preventDefault()
+                                      this.send({ kind: 'stepBack', toStep: tick })
+                                  }
+                              }
+                            : undefined,
+                    },
                     String(tick)
                 )
-            )
+            })
         )
 
         const bodies = GROUPS.map((group) => {
@@ -130,7 +160,12 @@ export class Timeline {
             const tick = state.firstTick + index
             const prev = index > 0 ? variable.history[index - 1] : undefined
             const changed = index > 0 && !sameValue(value, prev)
-            const classes = ['kv-cell', tick === state.tick ? 'kv-latest' : '', changed ? 'kv-changed' : '']
+            const classes = [
+                'kv-cell',
+                tick === state.tick ? 'kv-latest' : '',
+                changed ? 'kv-changed' : '',
+                state.debug?.paused?.step === tick ? 'kv-hit' : '',
+            ]
                 .filter(Boolean)
                 .join('.')
             let title = `${variable.label} = ${formatValue(value, format)} after tick ${tick}`

@@ -12,3 +12,14 @@ test('compilation systems are classified by target language', () => {
     assert.equal(buildLanguageOf('de.cau.cs.kieler.sccharts.priority.simulation', 'Priority-based Simulation'), 'c')
     assert.equal(buildLanguageOf('custom.system', 'Simulation via Java'), 'java')
 })
+
+test('the startup cache command and setting are contributed under the ids the manager uses', () => {
+    const { CLEAR_STARTUP_CACHE, STARTUP_CACHE_SETTING, STARTUP_CACHE_DIRECTORY } = load()
+    const manifest = require('../package.json')
+    assert.ok(manifest.contributes.commands.some((command) => command.command === CLEAR_STARTUP_CACHE))
+    assert.ok(manifest.contributes.menus.commandPalette.some((entry) => entry.command === CLEAR_STARTUP_CACHE))
+    const setting = manifest.contributes.configuration.properties[`keith-vscode.${STARTUP_CACHE_SETTING}`]
+    assert.equal(setting.type, 'boolean')
+    assert.equal(setting.default, true)
+    assert.equal(STARTUP_CACHE_DIRECTORY, 'cds')
+})
