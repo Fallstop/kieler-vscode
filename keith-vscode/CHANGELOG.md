@@ -4,7 +4,14 @@ All notable changes to the "keith-vscode" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [0.8.1] - 2026-09-10
+## [0.8.2] - 2026-09-10
+
+The release of the 0.8.0 and 0.8.1 pre-releases below, unchanged: a bundled Java runtime in every
+platform package, a downloadable C toolchain on Windows, diagrams pinned to the light palette,
+and the document-highlight fix. The Marketplace requires a version number of its own for the
+release channel.
+
+## [0.8.1] - 2026-09-10 (pre-release)
 
 - Diagrams are drawn with KIELER's light palette regardless of the VS Code colour theme. The
   dark palette that KLighD derives from dark editor themes is low-contrast; new setting
@@ -12,7 +19,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   applies to open diagrams immediately.
 - Package metadata points at the `Fallstop/sccharts-lab` repository.
 
-## [0.8.0] - 2026-09-10
+## [0.8.0] - 2026-09-10 (pre-release)
 
 - **Runs on a new computer without installing anything.** Marketplace and Open VSX builds are
   now platform-specific (Linux, macOS and Windows, x64 and arm64) and include a Java runtime:
