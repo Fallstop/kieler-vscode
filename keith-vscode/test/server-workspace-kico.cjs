@@ -112,7 +112,7 @@ async function main() {
         systems = await systemsFor(model)
         assert.ok(systems.find((system) => system.id === 'team.shared'))
         const listed = await connection.sendRequest('keith/kicool/workspaceSystems')
-        assert.deepEqual(listed.filter((entry) => entry.loaded).map((entry) => entry.id).sort(), ['my.custom', 'my.root', 'my.template', 'team.shared'])
+        assert.deepEqual(listed.filter((entry) => entry.loaded).map((entry) => entry.id).sort(), ['my.custom', 'my.root', 'my.template', 'team.shared'], JSON.stringify(listed, null, 1))
         assert.deepEqual(listed.filter((entry) => !entry.loaded).map((entry) => path.basename(entry.file)).sort(), ['bad.kico', 'duplicate.kico', 'unknown.kico'])
         console.log('Folders: a directory outside the workspace contributes systems too.')
 
