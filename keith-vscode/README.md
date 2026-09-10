@@ -116,6 +116,9 @@ Java simulation compiles with `javac`, which the bundled runtime does not includ
 `keith-vscode.javaHome` at a JDK 21 or newer (or have one on PATH) to use it; C simulation does
 not need this.
 
+Diagrams use KIELER's light palette whatever the editor theme; set
+`keith-vscode.diagramColorTheme` to `editor` to let dark themes switch to the dark palette.
+
 Some transformed operations have no source provenance. Those diagnostics retain
 their compiler stage or generated-file location instead of guessing a source line.
 

@@ -2,7 +2,7 @@
   "name": "sccharts-lab",
   "displayName": "SCCharts Lab",
   "description": "Edit, visualise, simulate tick by tick, and debug SCCharts models in VS Code. Independent fork of the KIELER VS Code extension (keith-vscode).",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "qinnovate",
   "author": "Jasper Miller-Waugh",
   "contributors": [
@@ -738,6 +738,19 @@
           "type": "boolean",
           "default": false,
           "description": "Specifies whether internal variables shall be shown in the simulation widget (e.g. guards, ...)."
+        },
+        "keith-vscode.diagramColorTheme": {
+          "type": "string",
+          "default": "light",
+          "enum": [
+            "light",
+            "editor"
+          ],
+          "enumDescriptions": [
+            "Always draw diagrams with KIELER's light palette (default).",
+            "Follow the VS Code colour theme: KIELER's dark palette on dark themes."
+          ],
+          "description": "Colour palette of the SCCharts diagrams. Applies to open diagrams immediately."
         },
         "keith-vscode.javaHome": {
           "type": "string",

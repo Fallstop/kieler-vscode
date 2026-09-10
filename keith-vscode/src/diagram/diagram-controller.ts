@@ -16,7 +16,13 @@
  */
 
 import 'reflect-metadata'
-import { ChangeColorThemeAction, ColorThemeKind, DebugOptions, SetRenderOptionAction } from '@kieler/klighd-core'
+import {
+    ChangeColorThemeAction,
+    ClientColorPreferencesAction,
+    ColorThemeKind,
+    DebugOptions,
+    SetRenderOptionAction,
+} from '@kieler/klighd-core'
 import { Action, ActionMessage } from 'sprotty-protocol'
 import { registerLspEditCommands } from 'sprotty-vscode'
 import * as vscode from 'vscode'
@@ -121,9 +127,12 @@ export class DiagramController {
             registerTextEditorSync(this.manager, this.context)
             this.context.subscriptions.push(
                 vscode.window.onDidChangeActiveColorTheme((theme) => {
-                    this.manager?.endpoints.forEach((endpoint) =>
-                        endpoint.sendAction(ChangeColorThemeAction.create(convertColorThemeKind(theme.kind)))
-                    )
+                    this.manager?.endpoints.forEach((endpoint) => endpoint.sendAction(paletteAction(theme.kind)))
+                }),
+                vscode.workspace.onDidChangeConfiguration((event) => {
+                    if (!event.affectsConfiguration(DIAGRAM_COLOR_THEME_SETTING)) return
+                    setColorTheme(this.client)
+                    this.manager?.endpoints.forEach((endpoint) => endpoint.sendAction(paletteAction()))
                 })
             )
             this.storageService.setMessenger(this.manager.messenger)
@@ -210,22 +219,50 @@ export class DiagramController {
     }
 }
 
-/** Sends VS Code's current theme with the language client's initialisation options. */
-function setColorTheme(client: LanguageClient): void {
-    const kind = convertColorThemeKind(vscode.window.activeColorTheme.kind)
-    // VS Code exposes no API for theme colours, so these mirror the default themes.
-    let foreground = '#000000'
-    let background = '#FFFFFF'
-    let highlight = '#005FB8'
+export const DIAGRAM_COLOR_THEME_SETTING = 'keith-vscode.diagramColorTheme'
+
+interface DiagramPalette {
+    kind: ColorThemeKind
+    foreground: string
+    background: string
+    highlight: string
+}
+
+/**
+ * The palette the server should draw with. KIELER's dark palette is low-contrast, so the default pins
+ * diagrams to the light one; `editor` follows the VS Code theme instead. VS Code exposes no API for
+ * theme colours, so the values mirror its default themes.
+ */
+export function diagramPalette(
+    setting = vscode.workspace.getConfiguration().get<string>(DIAGRAM_COLOR_THEME_SETTING),
+    editorTheme: vscode.ColorThemeKind = vscode.window.activeColorTheme.kind
+): DiagramPalette {
+    const kind = setting === 'editor' ? convertColorThemeKind(editorTheme) : ColorThemeKind.LIGHT
     if (kind === ColorThemeKind.DARK || kind === ColorThemeKind.HIGH_CONTRAST_DARK) {
-        foreground = '#D4D4D4'
-        background = '#1E1E1E'
-        highlight = '#0078D4'
+        return { kind, foreground: '#D4D4D4', background: '#1E1E1E', highlight: '#0078D4' }
     }
+    return { kind, foreground: '#000000', background: '#FFFFFF', highlight: '#005FB8' }
+}
+
+/** Sends the diagram palette with the language client's initialisation options. */
+function setColorTheme(client: LanguageClient): void {
     client.clientOptions.initializationOptions = {
         ...client.clientOptions.initializationOptions,
-        clientColorPreferences: { kind, foreground, background, highlight },
+        clientColorPreferences: diagramPalette(),
     }
+}
+
+/**
+ * Re-colours open diagrams. Following the editor goes through klighd-core, which reads the real theme
+ * colours from the webview's CSS; the pinned light palette is sent with explicit colours, because the
+ * server paints light regions with whatever background it is given.
+ */
+function paletteAction(editorTheme?: vscode.ColorThemeKind): ChangeColorThemeAction | ClientColorPreferencesAction {
+    const palette = diagramPalette(undefined, editorTheme)
+    const followEditor = vscode.workspace.getConfiguration().get<string>(DIAGRAM_COLOR_THEME_SETTING) === 'editor'
+    return followEditor
+        ? ChangeColorThemeAction.create(palette.kind)
+        : ClientColorPreferencesAction.create({ ...palette })
 }
 
 function convertColorThemeKind(kind: vscode.ColorThemeKind): ColorThemeKind {

@@ -4,6 +4,14 @@ All notable changes to the "keith-vscode" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.8.1] - 2026-09-10
+
+- Diagrams are drawn with KIELER's light palette regardless of the VS Code colour theme. The
+  dark palette that KLighD derives from dark editor themes is low-contrast; new setting
+  `keith-vscode.diagramColorTheme` (`light`, default, or `editor` to follow the theme again)
+  applies to open diagrams immediately.
+- Package metadata points at the `Fallstop/sccharts-lab` repository.
+
 ## [0.8.0] - 2026-09-10
 
 - **Runs on a new computer without installing anything.** Marketplace and Open VSX builds are
