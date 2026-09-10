@@ -16,7 +16,7 @@ const model = `scchart Review {
 }`
 
 async function main() {
-    const { java, serverArgs } = require('./server-launch.cjs')
+    const { java, serverArgs, sameFile } = require('./server-launch.cjs')
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-codegen-'))
     const server = spawn(java, serverArgs, { cwd: workspace })
     const closed = new Promise(resolve => server.once('close', resolve))
@@ -42,7 +42,7 @@ async function main() {
         fs.writeFileSync(file, text)
         const uri = pathToFileURL(file).href
         await connection.sendNotification('textDocument/didOpen', { textDocument: { uri, languageId: 'sctx', version: 1, text } })
-        const ready = waitFor('keith/kicool/didCompile', message => message.uri === uri && message.finished)
+        const ready = waitFor('keith/kicool/didCompile', message => sameFile(message.uri, uri) && message.finished)
         const progress = []
         const listener = connection.onNotification('keith/kicool/didCompile', message => {
             if (!message.finished) progress.push(message)

@@ -8,7 +8,7 @@ const { createMessageConnection, StreamMessageReader, StreamMessageWriter } = re
 
 async function main() {
     const extension = path.resolve(__dirname, '..')
-    const { classpath, java, serverArgs } = require('./server-launch.cjs')
+    const { classpath, java, serverArgs, sameFile } = require('./server-launch.cjs')
     // The two source-launcher checks below need a JDK (`java File.java`), so they always use PATH's java.
     const closedDiagram = spawnSync('java', ['-cp', classpath, path.join(__dirname, 'fixtures/DiagramRefreshCheck.java')], { encoding: 'utf8' })
     assert.equal(closedDiagram.status, 0, closedDiagram.stderr)
@@ -42,7 +42,7 @@ async function main() {
         fs.writeFileSync(file, text)
         const uri = pathToFileURL(file).href
         await connection.sendNotification('textDocument/didOpen', { textDocument: { uri, languageId: 'sctx', version: 1, text } })
-        const done = waitFor('keith/kicool/didCompile', result => result.finished && result.uri === uri)
+        const done = waitFor('keith/kicool/didCompile', result => result.finished && sameFile(result.uri, uri))
         await connection.sendNotification('keith/kicool/compile', { uri, command: 'de.cau.cs.kieler.sccharts.simulation.tts.netlist.c', clientId: 'keith-diagram_sprotty', inplace: true, showResultingModel: false, snapshot: false })
         const result = await done
         const stages = result.results.files.flat()

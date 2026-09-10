@@ -199,9 +199,11 @@ export class CompilationDataProvider {
                     currentIndex: number
                     maxIndex: number
                 }) => {
+                    // The server spells the URI its own way (drive letters and encoding differ on
+                    // Windows); every lookup here uses VS Code's spelling.
                     this.handleNewSnapshotDescriptions(
                         params.results,
-                        params.uri,
+                        vscode.Uri.parse(params.uri).toString(),
                         params.finished,
                         params.currentIndex,
                         params.maxIndex
