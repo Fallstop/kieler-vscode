@@ -12,12 +12,12 @@
   "license": "EPL-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Fallstop/kieler-vscode"
+    "url": "https://github.com/Fallstop/sccharts-lab"
   },
   "bugs": {
-    "url": "https://github.com/Fallstop/kieler-vscode/issues"
+    "url": "https://github.com/Fallstop/sccharts-lab/issues"
   },
-  "homepage": "https://github.com/Fallstop/kieler-vscode#readme",
+  "homepage": "https://github.com/Fallstop/sccharts-lab#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -791,7 +791,7 @@
     "lint": "eslint .",
     "lint-fix": "eslint --fix .",
     "test": "node --test test/*.test.cjs",
-    "test:server": "node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs",
+    "test:server": "node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs && node test/server-highlight.cjs",
     "build": "webpack --mode production",
     "watch": "webpack --watch",
     "package": "node scripts/package-extension.cjs",
