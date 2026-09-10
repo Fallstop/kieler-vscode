@@ -122,7 +122,8 @@ async function main() {
         fs.writeFileSync(path.join(workspace, 'kico/bad.kico'), 'public system my.fixed label "Fixed" system de.cau.cs.kieler.sccharts.netlist\n')
         await connection.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: good, type: 2 }, { uri: bad, type: 2 }] })
         const change = await replaced
-        assert.deepEqual(change.removed.map((entry) => entry.id), ['my.custom'])
+        const afterEdit = await connection.sendRequest('keith/kicool/workspaceSystems')
+        assert.deepEqual(change.removed.map((entry) => entry.id), ['my.custom'], `change ${JSON.stringify(change)}\nclient uri ${good}\nlisting ${JSON.stringify(afterEdit, null, 1)}`)
         await waitFor('keith/kicool/systemsChanged', (params) => params.added.some((entry) => entry.id === 'my.fixed')).catch(() => undefined)
         systems = await systemsFor(model)
         assert.ok(!systems.find((system) => system.id === 'my.custom'), 'The old id is gone')
