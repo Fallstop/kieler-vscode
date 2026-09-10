@@ -2,7 +2,7 @@
   "name": "sccharts-lab",
   "displayName": "SCCharts Lab",
   "description": "Edit, visualise, simulate tick by tick, and debug SCCharts models in VS Code. Independent fork of the KIELER VS Code extension (keith-vscode).",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "publisher": "qinnovate",
   "author": "Jasper Miller-Waugh",
   "contributors": [
@@ -810,6 +810,7 @@
     "package": "node scripts/package-extension.cjs",
     "package:platform": "node scripts/package-extension.cjs",
     "vscode:prepublish": "yarn run build",
+    "vscode:uninstall": "node ./scripts/uninstall.cjs",
     "build:server": "node scripts/build-server.cjs --required",
     "build:jre": "node scripts/build-jre.cjs --host"
   },

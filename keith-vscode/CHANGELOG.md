@@ -4,6 +4,13 @@ All notable changes to the "keith-vscode" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.8.3] - 2026-09-10
+
+- Uninstalling the extension deletes the downloaded w64devkit toolchain. VS Code keeps an
+  extension's global storage across an uninstall and reinstall in the same session, so a
+  `vscode:uninstall` hook now removes it; the extension records its storage path for the hook on
+  every activation.
+
 ## [0.8.2] - 2026-09-10
 
 The release of the 0.8.0 and 0.8.1 pre-releases below, unchanged: a bundled Java runtime in every

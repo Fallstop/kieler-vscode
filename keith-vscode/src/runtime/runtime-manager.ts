@@ -71,6 +71,7 @@ export class RuntimeManager implements vscode.Disposable {
         if (manifest && process.platform === 'win32') {
             this.installer = new W64DevkitInstaller(context.globalStorageUri.fsPath, manifest)
         }
+        this.recordStorageForUninstall()
         context.subscriptions.push(
             this.output,
             vscode.commands.registerCommand(DOWNLOAD_C_TOOLCHAIN, () => this.downloadCToolchain()),
@@ -85,6 +86,21 @@ export class RuntimeManager implements vscode.Disposable {
 
     private get settings(): vscode.WorkspaceConfiguration {
         return vscode.workspace.getConfiguration(settingsKey)
+    }
+
+    /**
+     * The uninstall hook (scripts/uninstall.cjs) runs without the VS Code API, so the global storage
+     * path it must clean is written next to it on every activation.
+     */
+    private recordStorageForUninstall(): void {
+        try {
+            fs.writeFileSync(
+                this.context.asAbsolutePath('uninstall.json'),
+                `${JSON.stringify({ globalStorage: this.context.globalStorageUri.fsPath }, null, 2)}\n`
+            )
+        } catch {
+            // Read-only installation: an uninstall then leaves the toolchain behind, as before.
+        }
     }
 
     private readToolchainManifest(): W64DevkitManifest | undefined {

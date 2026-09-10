@@ -104,7 +104,8 @@ C simulation compiles the generated program with a C compiler:
 
 - **Windows**: the first C simulation offers to download [w64devkit](https://github.com/skeeto/w64devkit)
   (a portable GCC, 61 MB) into VS Code's storage folder for this extension; no installer, no
-  PATH changes, removable with **SCCharts Lab: Remove downloaded C toolchain**. Windows on ARM
+  PATH changes, removable with **SCCharts Lab: Remove downloaded C toolchain** and deleted when
+  the extension is uninstalled. Windows on ARM
   runs the x64 toolchain through emulation. An existing MinGW or MSYS2 `gcc.exe` can be used
   instead through `keith-vscode.cCompilerPath`.
 - **macOS**: install the Xcode Command Line Tools (`xcode-select --install`); their `gcc`

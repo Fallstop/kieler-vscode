@@ -18,3 +18,4 @@ out
 
 # Per-platform jlink runtime produced by keith-vscode/scripts/build-jre.cjs
 keith-vscode/server/jre/
+keith-vscode/uninstall.json
