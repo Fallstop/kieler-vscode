@@ -11,14 +11,17 @@ This monorepo is the home of SCCharts Lab, an independent fork of the KIELER VS 
 ## Requirements
 
 Development of this project requires [Node.js _v24.x_](https://nodejs.org) and
-[yarn _v1.x_](https://classic.yarnpkg.com/). Further, the language server jar and its
-Jetty libraries have to be present in `keith-vscode/server`. Run
-`yarn --cwd keith-vscode fetch-server` to download and verify them against
-`keith-vscode/server/manifest.json`.
+[yarn _v1.x_](https://classic.yarnpkg.com/). The language server JAR is built from the
+sccharts-lite fork with `yarn --cwd keith-vscode build:server` (JDK 21 and Maven; see
+`keith-vscode/scripts/build-server.cjs` for the `SCCHARTS_SERVER_SRC` and `SCCHARTS_SERVER_JAR`
+variables) into `keith-vscode/server`.
 
-Diagram support is included. Building the bundled server diagnostic patch requires
-a JDK 11 or newer. See [the patch documentation](keith-vscode/server-src/README.md)
-and [test instructions](keith-vscode/test/README.md).
+End users need nothing: the platform packages on the Marketplace bundle a Java runtime
+(`keith-vscode/scripts/build-jre.cjs`, pinned in `keith-vscode/server/runtime-manifest.json`)
+and Windows downloads a C compiler on first use. See the
+[extension README](keith-vscode/README.md#requirements).
+
+Diagram support is included. See [test instructions](keith-vscode/test/README.md).
 
 ## Scripts
 

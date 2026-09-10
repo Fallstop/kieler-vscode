@@ -1,6 +1,14 @@
 # Builds, verifies, and publishes the extension when a version tag (v1.2.3) is pushed.
 # The tag must equal keith-vscode/package.json "version". Requires the VSCE_PAT secret
 # (Azure DevOps token, Marketplace > Manage scope). OVSX_PAT is optional for Open VSX.
+#
+# Seven packages are produced: one per VS Code target platform with a bundled Java runtime
+# (linked from Eclipse Temurin with jlink, see keith-vscode/server/runtime-manifest.json) and a
+# universal package without a runtime that needs Java 21 on the machine.
+#
+# A tag ending in "-pre" (v0.8.0-pre) publishes that version as a pre-release: GitHub pre-release,
+# Marketplace and Open VSX pre-release channel. The package version itself has no suffix because
+# VS Code does not accept semver pre-release identifiers.
 
 name: release
 
@@ -11,52 +19,178 @@ on:
 permissions:
     contents: write
 
-jobs:
-    release:
-        name: Package and publish
-        runs-on: ubuntu-latest
-        env:
-            OVSX_PAT: ${{ secrets.OVSX_PAT }}
+env:
+    # "true" for v1.2.3-pre tags, "false" for v1.2.3
+    PRERELEASE: ${{ endsWith(github.ref_name, '-pre') }}
 
+jobs:
+    verify:
+        name: Build the server and run every check
+        runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-
             - uses: actions/setup-node@v4
               with:
                   node-version: 24.x
                   cache: yarn
-            - uses: actions/setup-java@v4
-              with:
-                  distribution: temurin
-                  java-version: '17'
-
             - name: Check tag matches package version
               run: |
                   version="v$(node -p "require('./keith-vscode/package.json').version")"
-                  test "$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != package version $version"; exit 1; }
-
+                  tag="${GITHUB_REF_NAME%-pre}"
+                  test "$version" = "$tag" || { echo "tag $GITHUB_REF_NAME != package version $version"; exit 1; }
             - run: yarn --frozen-lockfile
 
-            - name: Restore server runtime
-              uses: actions/cache@v4
+            - uses: actions/setup-java@v4
               with:
-                  path: |
-                      keith-vscode/server/kieler-language-server.jar
-                      keith-vscode/server/kieler-language-server.jar.stamp
-                      keith-vscode/server/jetty10
-                  key: server-${{ hashFiles('keith-vscode/server/manifest.json', 'keith-vscode/scripts/trim-server.cjs') }}
-            - run: yarn --cwd keith-vscode fetch-server
+                  distribution: temurin
+                  java-version: '21'
+                  cache: maven
+
+            # The language server is built from the sccharts-lite fork (KIELER's SCCharts compiler,
+            # simulation and diagram server with this extension's diagnostics built in). Point
+            # SCCHARTS_SERVER_REPO/SCCHARTS_SERVER_REF at the fork repository to build.
+            - name: Check out the language server sources
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ vars.SCCHARTS_SERVER_REPO || 'Fallstop/sccharts-lite-server' }}
+                  ref: ${{ vars.SCCHARTS_SERVER_REF || 'main' }}
+                  path: sccharts-lite-server
+            - run: yarn --cwd keith-vscode build:server
+              env:
+                  SCCHARTS_SERVER_SRC: ${{ github.workspace }}/sccharts-lite-server
 
             - run: yarn --cwd keith-vscode test
             - run: yarn --cwd keith-vscode test:server
             - run: yarn tsc --noEmit -p keith-vscode/tsconfig.json
             - run: yarn tsc --noEmit -p keith-vscode/tsconfig.webview.json
             - run: yarn lint
-            - run: yarn package
+
+            - name: Cache runtime downloads
+              uses: actions/cache@v4
+              with:
+                  path: keith-vscode/out/runtime-cache
+                  key: runtime-${{ runner.os }}-${{ hashFiles('keith-vscode/server/runtime-manifest.json') }}
+            - run: yarn --cwd keith-vscode build:jre
+            - name: Server suites on the bundled runtime
+              run: yarn --cwd keith-vscode test:server
+              env:
+                  SCCHARTS_JAVA: ${{ github.workspace }}/keith-vscode/server/jre/bin/java
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: server-jar
+                  path: keith-vscode/server/sccharts-lite-server.jar
+                  if-no-files-found: error
+
+    package:
+        name: Package ${{ matrix.target }}
+        runs-on: ubuntu-latest
+        needs: verify
+        strategy:
+            fail-fast: false
+            matrix:
+                target: [universal, linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64, win32-arm64]
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24.x
+                  cache: yarn
+            - run: yarn --frozen-lockfile
+            - uses: actions/download-artifact@v4
+              with:
+                  name: server-jar
+                  path: keith-vscode/server
+
+            - name: Cache runtime downloads
+              if: matrix.target != 'universal'
+              uses: actions/cache@v4
+              with:
+                  path: keith-vscode/out/runtime-cache
+                  key: runtime-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('keith-vscode/server/runtime-manifest.json') }}
+            - name: Package with a bundled runtime
+              if: matrix.target != 'universal'
+              run: yarn --cwd keith-vscode package:platform ${{ matrix.target }}
+              env:
+                  SCCHARTS_PRERELEASE: ${{ env.PRERELEASE }}
+            - name: Package the universal build
+              if: matrix.target == 'universal'
+              run: yarn --cwd keith-vscode package
+              env:
+                  SCCHARTS_PRERELEASE: ${{ env.PRERELEASE }}
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: vsix-${{ matrix.target }}
+                  path: keith-vscode/*.vsix
+                  if-no-files-found: error
+
+    windows:
+        name: Windows runtime and toolchain smoke
+        runs-on: windows-latest
+        needs: verify
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24.x
+                  cache: yarn
+            - run: yarn --frozen-lockfile
+            - uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '21'
+            - uses: actions/download-artifact@v4
+              with:
+                  name: server-jar
+                  path: keith-vscode/server
+            - name: Cache runtime downloads
+              uses: actions/cache@v4
+              with:
+                  path: keith-vscode/out/runtime-cache
+                  key: runtime-${{ runner.os }}-${{ hashFiles('keith-vscode/server/runtime-manifest.json') }}
+            - run: yarn --cwd keith-vscode build:jre
+            - name: Install w64devkit the way the extension does
+              shell: pwsh
+              run: |
+                  $manifest = (Get-Content keith-vscode/server/runtime-manifest.json | ConvertFrom-Json).w64devkit
+                  $archive = "$env:RUNNER_TEMP\w64devkit.7z.exe"
+                  Invoke-WebRequest -Uri $manifest.url -OutFile $archive
+                  $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+                  if ($hash -ne $manifest.sha256) { throw "w64devkit checksum mismatch: $hash" }
+                  Start-Process -FilePath $archive -ArgumentList "-o$env:RUNNER_TEMP\toolchain", "-y" -Wait -NoNewWindow
+                  $gcc = Join-Path "$env:RUNNER_TEMP\toolchain" $manifest.gcc
+                  if (-not (Test-Path $gcc)) { throw "gcc.exe missing after extraction" }
+                  "SCCHARTS_CC=$gcc" >> $env:GITHUB_ENV
+                  Split-Path $gcc >> $env:GITHUB_PATH
+            - name: Server suites on the bundled runtime with w64devkit
+              run: yarn --cwd keith-vscode test:server
+              env:
+                  SCCHARTS_JAVA: ${{ github.workspace }}\keith-vscode\server\jre\bin\java.exe
+
+    release:
+        name: GitHub release and Marketplace
+        runs-on: ubuntu-latest
+        needs: [package, windows]
+        env:
+            OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24.x
+                  cache: yarn
+            - run: yarn --frozen-lockfile
+            - uses: actions/download-artifact@v4
+              with:
+                  pattern: vsix-*
+                  path: packages
+                  merge-multiple: true
+            - run: ls -la packages
 
             - name: Extract release notes from CHANGELOG
               run: |
-                  version="${GITHUB_REF_NAME#v}"
+                  version="${GITHUB_REF_NAME#v}"; version="${version%-pre}"
                   awk -v v="$version" '
                       $0 ~ "^## \\[" v "\\]" { found = 1; next }
                       found && /^## \[/ { exit }
@@ -67,18 +201,28 @@ jobs:
             - name: GitHub release
               uses: softprops/action-gh-release@v2
               with:
-                  files: keith-vscode/sccharts-lab.vsix
+                  files: packages/*.vsix
                   body_path: release-notes.md
+                  prerelease: ${{ env.PRERELEASE == 'true' }}
 
+            # Not `vsce publish`: its fixed three-minute socket timeout is shorter than the
+            # Marketplace takes to process these packages. Platform packages first, universal last.
             - name: Publish to VS Code Marketplace
               working-directory: keith-vscode
               env:
                   VSCE_PAT: ${{ secrets.VSCE_PAT }}
-              # Not `vsce publish`: its fixed three-minute socket timeout is shorter than the
-              # Marketplace takes to process this package.
-              run: node scripts/publish-marketplace.cjs sccharts-lab.vsix
+              run: |
+                  platform=$(ls ../packages/sccharts-lab-*.vsix)
+                  node scripts/publish-marketplace.cjs $platform ../packages/sccharts-lab.vsix
 
             - name: Publish to Open VSX
               if: env.OVSX_PAT != ''
               working-directory: keith-vscode
-              run: yarn ovsx publish sccharts-lab.vsix -p "$OVSX_PAT"
+              run: |
+                  flags=()
+                  [ "$PRERELEASE" = "true" ] && flags+=(--pre-release)
+                  for vsix in ../packages/sccharts-lab-*.vsix; do
+                      target="${vsix##*/sccharts-lab-}"; target="${target%.vsix}"
+                      yarn ovsx publish "$vsix" --target "$target" "${flags[@]}" -p "$OVSX_PAT"
+                  done
+                  yarn ovsx publish ../packages/sccharts-lab.vsix "${flags[@]}" -p "$OVSX_PAT"

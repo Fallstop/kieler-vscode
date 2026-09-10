@@ -16,7 +16,6 @@
  */
 
 import { connect, NetConnectOpts, Socket } from 'net'
-import * as path from 'path'
 import * as vscode from 'vscode'
 import { LanguageClient, LanguageClientOptions, ServerOptions, State, StreamInfo } from 'vscode-languageclient/node'
 import { Settings, settingsKey } from './constants'
@@ -28,6 +27,7 @@ import { CompilationDataProvider } from './kico/compilation-data-provider'
 import { DiagnosticBridge } from './kico/diagnostic-bridge'
 import { registerCodeGeneration } from './kico/code-generation'
 import { handlePerformAction, PerformActionAction, performActionKind } from './perform-action-handler'
+import { RuntimeManager } from './runtime/runtime-manager'
 import { SettingsService } from './settings'
 import { RESTART_LANGUAGE_SERVER } from './simulation/commands'
 import { SimulationTableDataProvider } from './simulation/simulation-table-data-provider'
@@ -60,9 +60,10 @@ export async function deactivate(): Promise<void> {
  * Depending on the launch configuration, returns {@link ServerOptions} that either
  * connect to a socket or start the LS as a process. It uses a socket if the
  * environment variable `KEITH_LS_PORT` is present. Otherwise it runs the jar located
- * at `server/kieler-language-server.jar`.
+ * at `server/sccharts-lite-server.jar` on the Java the {@link RuntimeManager} resolved:
+ * the runtime bundled with a platform build, or a Java 21+ found on the machine.
  */
-function createServerOptions(context: vscode.ExtensionContext): ServerOptions {
+function createServerOptions(runtime: RuntimeManager): ServerOptions {
     // Connect to language server via socket if a port is specified as an env variable
     if (typeof process.env.KEITH_LS_PORT !== 'undefined') {
         const connectionInfo: NetConnectOpts = {
@@ -80,25 +81,11 @@ function createServerOptions(context: vscode.ExtensionContext): ServerOptions {
             return result
         }
     }
-    // eslint-disable-next-line no-console
-    console.log('Spawning the language server as a process.')
-    const lsPath = context.asAbsolutePath(`server/kieler-language-server.jar`)
-    // The bundled language server ships Jetty 11 without a websocket module, but its simulation
-    // visualization server was compiled against Jetty 10. Putting Jetty 10 first on the classpath
-    // shadows the bundled classes so the server on port 5010 can start.
-    const jettyPath = context.asAbsolutePath(`server/jetty10/*`)
-    const diagnosticsPath = context.asAbsolutePath('server/diagnostics.jar')
-    const args = [
-        '-Djava.awt.headless=true',
-        '-cp',
-        `${diagnosticsPath}${path.delimiter}${jettyPath}${path.delimiter}${lsPath}`,
-        'de.cau.cs.kieler.language.server.LanguageServer',
-    ]
-
-    return {
-        run: { command: 'java', args },
-        debug: { command: 'java', args },
-    }
+    // The server is the sccharts-lite build: KIELER's SCCharts compiler, simulation and KLighD
+    // diagram server with this extension's diagnostics built in, shaded into one JAR. Spawning it
+    // ourselves (instead of handing the client a command) lets every restart pick up a toolchain that
+    // was downloaded or configured in the meantime.
+    return () => runtime.launchServer()
 }
 
 /**
@@ -129,7 +116,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // Create context key of supported languages
     vscode.commands.executeCommand('setContext', 'keith-vscode.languages', supportedFileEndings)
 
-    const serverOptions: ServerOptions = createServerOptions(context)
+    // Without a usable Java there is nothing to start; explain and stop instead of registering
+    // commands that would all fail with "spawn java ENOENT".
+    const runtime = new RuntimeManager(context)
+    context.subscriptions.push(runtime)
+    if (typeof process.env.KEITH_LS_PORT === 'undefined' && !(await runtime.resolveJava())) {
+        await runtime.reportMissingJava()
+        return
+    }
+
+    const serverOptions: ServerOptions = createServerOptions(runtime)
 
     const clientOptions: LanguageClientOptions = {
         documentSelector: supportedFileEndings.map((ending) => ({
@@ -190,6 +186,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         context,
         settingsService
     )
+    // A simulation build needs a C compiler (or javac); check, offer the download, and only then compile.
+    simulationDataProvider.prepareBuild = (systemId, label) => runtime.prepareBuild(systemId, label)
+    runtime.restartServer = () => restartLanguageServer(simulationDataProvider)
     context.subscriptions.push(new SimulationViewBridge(simulationDataProvider, diagrams, settingsService))
 
     context.subscriptions.push(

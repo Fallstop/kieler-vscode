@@ -1,26 +1,37 @@
+import java.lang.reflect.Field;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import org.kieler.vscode.diagnostics.MainThread;
+import de.cau.cs.kieler.klighd.lsp.launch.AbstractLanguageServer;
 
 class MainThreadCheck {
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
-        BlockingQueue<Consumer<Void>> queue = new LinkedBlockingQueue<>();
+        // The server's main-thread queue is private; drain it the way configureAndRun's loop does.
+        Field field = AbstractLanguageServer.class.getDeclaredField("mainThreadQueue");
+        field.setAccessible(true);
+        BlockingQueue<Consumer<Void>> queue = (BlockingQueue<Consumer<Void>>) field.get(null);
         boolean[] inner = new boolean[1];
-        // Drains the queue the way the language server's main loop does.
         Thread main = new Thread(() -> {
             try {
-                while (!Thread.currentThread().isInterrupted()) queue.take().accept(null);
+                while (!Thread.currentThread().isInterrupted()) {
+                    synchronized (queue) {
+                        while (queue.isEmpty()) queue.wait();
+                        Consumer<Void> task = queue.peek();
+                        task.accept(null);
+                        queue.poll();
+                        queue.notifyAll();
+                    }
+                }
             } catch (InterruptedException ignored) {
                 // stopped
             }
         });
         main.start();
-        Thread caller = new Thread(() -> MainThread.enqueue(queue, ignored -> {
+        Thread caller = new Thread(() -> AbstractLanguageServer.addToMainThreadQueue(ignored -> {
             // A task on the main thread that asks for more main-thread work, as a show-snapshot
             // whose layout future has already completed does. This waited for itself forever.
-            MainThread.enqueue(queue, nested -> inner[0] = true);
+            AbstractLanguageServer.addToMainThreadQueue(nested -> inner[0] = true);
         }));
         caller.start();
         caller.join(TimeUnit.SECONDS.toMillis(10));

@@ -15,7 +15,5 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 
-server-src/**
 scripts/**
 
-server/*.stamp

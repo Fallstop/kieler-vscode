@@ -4,7 +4,51 @@ All notable changes to the "keith-vscode" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.8.0] - 2026-09-10
+
+- **Runs on a new computer without installing anything.** Marketplace and Open VSX builds are
+  now platform-specific (Linux, macOS and Windows, x64 and arm64) and include a Java runtime:
+  a `jlink` image of Eclipse Temurin 21 reduced to the eleven modules the language server
+  needs, 30 MB compressed. One Linux machine links all six from the pinned JDKs in
+  `server/runtime-manifest.json`. Measured alternatives: JustJ's smallest ready-made JRE is
+  48 MB and lacks the `jdk.zipfs` module the server copies its C templates with; a Java 25
+  image of the same modules is 2 MB larger, so 21 stays. An uncompressed jimage deflates
+  better inside the VSIX than jlink's own compression (30 MB against 38 MB) and starts faster.
+- Java is looked up in order: bundled runtime, `keith-vscode.javaHome` (new setting),
+  `JDK_HOME`, `JAVA_HOME`, PATH, each checked for version 21 or newer. Without one, activation
+  stops with a message offering the Temurin download and the setting instead of failing every
+  command with `spawn java ENOENT`. **Restart KIELER language server** re-resolves, so a
+  changed `javaHome` needs no reload. The universal `.vsix` is still built and still needs a
+  Java 21 on the machine.
+- **Windows C simulation without a toolchain**: the first C simulation offers to download
+  w64devkit 2.9.1 (portable GCC, 61 MB, sha256-verified, self-extracting) into the extension's
+  global storage, then restarts the server to use it. New commands **Download C toolchain**,
+  **Remove downloaded C toolchain** and **Show Java runtime and C compiler in use**; new
+  setting `keith-vscode.cCompilerPath` for an existing compiler on any platform. macOS and
+  Linux get an install hint for the Command Line Tools or the distribution's gcc package
+  instead of a generic compile failure. Java simulation checks for `javac` first and explains
+  that it needs a JDK.
+- The server takes its compiler from `-Dsccharts.cc` and runs `java`, `javac` and `jar` from
+  the JVM it is executing on, so the bundled runtime never depends on PATH. The server build
+  was repaired after its last two commits had left it unable to start (OSGi service loading,
+  content-assist bindings of the non-SCTX languages, ELK's `Plugin` subclass) and now keeps
+  the Eclipse runtime jars on the classpath, unstarted; it is 31 MB.
+- Release workflow: verify, then a seven-way package matrix, a Windows job that runs the server
+  suites on the bundled runtime with a freshly downloaded w64devkit, and one publish step for
+  all packages. `publish-marketplace.cjs` takes several files and skips versions already
+  published for a target platform.
+- The language server is now built from source: the sccharts-lite fork compiles KIELER's
+  SCCharts compiler, simulation and KLighD diagram server with plain Maven and Maven Central
+  dependencies, without Tycho, Eclipse or OSGi, into a 29 MB JAR (the trimmed upstream JAR was
+  37 MB, the original 94 MB). Esterel, Lustre, KiVis, verification, the KGraph/ELK text languages,
+  the Eclipse workbench code and the Jetty visualization server are gone. Everything the former
+  bytecode patch added (structured diagnostics, source tracing, scheduler cycle witnesses, loop
+  explanations, C compiler mapping, string ownership in simulations, KLighD concurrency fixes,
+  virtual generated files) is now ordinary source in the fork; `server-src/` and the ASM patch
+  step are removed, and the Jetty 10 classpath override is no longer needed.
+- Requires Java 21 (KLighD 3.1 and upstream KIELER are compiled for it). The server tracks
+  upstream master (KLighD 3.1.0, ELK 0.11, Xtext 2.37, lsp4j 0.23.1) instead of the 2024 release.
+- **Simulation visualization server** (`startVisualizationServer`) is not available in this build.
 
 ## [0.7.1] - 2026-09-09
 

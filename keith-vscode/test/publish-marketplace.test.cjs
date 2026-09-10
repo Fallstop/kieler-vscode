@@ -7,7 +7,7 @@ const { test } = require('node:test')
 const script = fs.readFileSync(path.join(__dirname, '../scripts/publish-marketplace.cjs'), 'utf8')
 const failure = statusCode => Object.assign(new Error(`HTTP ${statusCode}`), { statusCode })
 
-async function publish(lookups, uploadError) {
+async function publish(lookups, uploadError, files = ['release.vsix']) {
     const logs = []
     const uploads = []
     let credential
@@ -35,7 +35,7 @@ async function publish(lookups, uploadError) {
     await vm.runInNewContext(script, {
         require: name => { assert.ok(name in dependencies); return dependencies[name] },
         __dirname,
-        process: { argv: ['node', 'publish-marketplace.cjs', 'release.vsix'], env: { VSCE_PAT: ' secret-token\n' }, exit: code => { exitCode = code } },
+        process: { argv: ['node', 'publish-marketplace.cjs', ...files], env: { VSCE_PAT: ' secret-token\n' }, exit: code => { exitCode = code } },
         console: { log: message => logs.push(message), error: message => logs.push(message) },
     })
     return { logs: logs.join('\n'), uploads, credential, exitCode }
@@ -67,4 +67,20 @@ test('authentication errors identify the credential remedy without exposing the 
             assert.doesNotMatch(result.logs, /secret-token/)
         }
     }
+})
+
+test('platform packages are matched against the target platform of published versions', async () => {
+    const published = { versions: [{ version: '1.2.3', targetPlatform: 'linux-x64' }, { version: '1.2.3' }] }
+    const result = await publish([published], undefined, ['sccharts-lab-linux-x64.vsix', 'sccharts-lab-win32-x64.vsix', 'sccharts-lab.vsix'])
+    assert.deepEqual(result.uploads, ['update'])
+    assert.match(result.logs, /\(linux-x64\) is already published/)
+    assert.match(result.logs, /Published example\.extension v1\.2\.3 \(win32-x64\)/)
+    assert.match(result.logs, /v1\.2\.3 is already published/)
+    assert.equal(result.exitCode, 0)
+})
+
+test('the first upload of a new extension creates it and the following ones update it', async () => {
+    const result = await publish([failure(404)], undefined, ['sccharts-lab-linux-x64.vsix', 'sccharts-lab.vsix'])
+    assert.deepEqual(result.uploads, ['create', 'update'])
+    assert.equal(result.exitCode, 0)
 })

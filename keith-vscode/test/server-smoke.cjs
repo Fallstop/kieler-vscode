@@ -9,13 +9,13 @@ const { readDataPool, inputValue } = require('./load-typescript.cjs')()('src/sim
 
 async function main() {
     const extension = path.resolve(__dirname, '..')
-    const serverDir = process.env.KIELER_SERVER_DIR ?? path.join(extension, 'server')
-    assert.ok(fs.existsSync(path.join(serverDir, 'kieler-language-server.jar')), 'The bundled language server JAR is required')
+    const { classpath, java, serverArgs } = require('./server-launch.cjs')
+    assert.ok(fs.existsSync(classpath), 'The language server JAR is required; run npm run build:server')
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-smoke-'))
     const fixture = path.join(workspace, 'audit.sctx')
     fs.copyFileSync(path.join(__dirname, 'fixtures/audit.sctx'), fixture)
     const uri = pathToFileURL(fixture).href
-    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', `${serverDir}/diagnostics.jar${path.delimiter}${serverDir}/jetty10/*${path.delimiter}${serverDir}/kieler-language-server.jar`, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: extension })
+    const server = spawn(java, serverArgs, { cwd: extension })
     const closed = new Promise((resolve) => server.once('close', resolve))
     let stderr = ''
     server.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-12000) })

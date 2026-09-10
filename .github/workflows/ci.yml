@@ -16,7 +16,7 @@ jobs:
 
         steps:
             - uses: actions/checkout@v4
-            - uses: actions/cache@v3
+            - uses: actions/cache@v4
               with:
                   path: '**/node_modules'
                   key: ${{ runner.os }}-node-modules-${{ hashFiles('**/yarn.lock') }}
@@ -26,26 +26,103 @@ jobs:
                   node-version: 24.x
             - run: yarn
 
-            - name: Restore server runtime
-              uses: actions/cache@v4
+            - uses: actions/setup-java@v4
               with:
-                  path: |
-                      keith-vscode/server/kieler-language-server.jar
-                      keith-vscode/server/kieler-language-server.jar.stamp
-                      keith-vscode/server/jetty10
-                  key: server-${{ hashFiles('keith-vscode/server/manifest.json', 'keith-vscode/scripts/trim-server.cjs') }}
-            - run: yarn --cwd keith-vscode fetch-server
+                  distribution: temurin
+                  java-version: '21'
+                  cache: maven
+
+            # The language server is built from the sccharts-lite fork (KIELER's SCCharts compiler,
+            # simulation and diagram server with this extension's diagnostics built in). Point
+            # SCCHARTS_SERVER_REPO/SCCHARTS_SERVER_REF at the fork repository to build.
+            - name: Check out the language server sources
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ vars.SCCHARTS_SERVER_REPO || 'Fallstop/sccharts-lite-server' }}
+                  ref: ${{ vars.SCCHARTS_SERVER_REF || 'main' }}
+                  path: sccharts-lite-server
+            - run: yarn --cwd keith-vscode build:server
+              env:
+                  SCCHARTS_SERVER_SRC: ${{ github.workspace }}/sccharts-lite-server
 
             - run: yarn --cwd keith-vscode test
             - run: yarn --cwd keith-vscode test:server
             - run: yarn tsc --noEmit -p keith-vscode/tsconfig.json
             - run: yarn tsc --noEmit -p keith-vscode/tsconfig.webview.json
-            - run: yarn package
             - run: yarn lint
 
+            # The bundled runtime is a jlink image with only the modules the server needs; run the
+            # server suites on it so a module that went missing is caught here, not on a user's machine.
+            - name: Cache runtime downloads
+              uses: actions/cache@v4
+              with:
+                  path: keith-vscode/out/runtime-cache
+                  key: runtime-${{ runner.os }}-${{ hashFiles('keith-vscode/server/runtime-manifest.json') }}
+            - run: yarn --cwd keith-vscode build:jre
+            - name: Server suites on the bundled runtime
+              run: yarn --cwd keith-vscode test:server
+              env:
+                  SCCHARTS_JAVA: ${{ github.workspace }}/keith-vscode/server/jre/bin/java
+
+            - run: yarn package
             - name: Attach SCCharts Lab extension
               uses: actions/upload-artifact@v4
               with:
                   name: sccharts-lab-vsix
                   path: keith-vscode/sccharts-lab.vsix
                   if-no-files-found: error
+            - name: Share the server JAR with the Windows job
+              uses: actions/upload-artifact@v4
+              with:
+                  name: server-jar
+                  path: keith-vscode/server/sccharts-lite-server.jar
+                  if-no-files-found: error
+
+    windows:
+        name: Windows runtime and toolchain smoke
+        runs-on: windows-latest
+        needs: lint
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24.x
+                  cache: yarn
+            - run: yarn --frozen-lockfile
+            # The diagnostics suite also runs two Java source files directly, which needs a JDK on PATH.
+            - uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '21'
+            - uses: actions/download-artifact@v4
+              with:
+                  name: server-jar
+                  path: keith-vscode/server
+
+            - name: Cache runtime downloads
+              uses: actions/cache@v4
+              with:
+                  path: keith-vscode/out/runtime-cache
+                  key: runtime-${{ runner.os }}-${{ hashFiles('keith-vscode/server/runtime-manifest.json') }}
+            - run: yarn --cwd keith-vscode build:jre
+
+            # The same download and self-extraction the extension performs on a user's machine.
+            - name: Install w64devkit the way the extension does
+              shell: pwsh
+              run: |
+                  $manifest = (Get-Content keith-vscode/server/runtime-manifest.json | ConvertFrom-Json).w64devkit
+                  $archive = "$env:RUNNER_TEMP\w64devkit.7z.exe"
+                  Invoke-WebRequest -Uri $manifest.url -OutFile $archive
+                  $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+                  if ($hash -ne $manifest.sha256) { throw "w64devkit checksum mismatch: $hash" }
+                  Start-Process -FilePath $archive -ArgumentList "-o$env:RUNNER_TEMP\toolchain", "-y" -Wait -NoNewWindow
+                  $gcc = Join-Path "$env:RUNNER_TEMP\toolchain" $manifest.gcc
+                  if (-not (Test-Path $gcc)) { throw "gcc.exe missing after extraction" }
+                  & $gcc --version
+                  "SCCHARTS_CC=$gcc" >> $env:GITHUB_ENV
+                  Split-Path $gcc >> $env:GITHUB_PATH
+
+            - name: Server suites on the bundled runtime with w64devkit
+              run: yarn --cwd keith-vscode test:server
+              env:
+                  SCCHARTS_JAVA: ${{ github.workspace }}\keith-vscode\server\jre\bin\java.exe

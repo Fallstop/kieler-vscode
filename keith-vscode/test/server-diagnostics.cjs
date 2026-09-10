@@ -8,14 +8,14 @@ const { createMessageConnection, StreamMessageReader, StreamMessageWriter } = re
 
 async function main() {
     const extension = path.resolve(__dirname, '..')
-    const serverDir = process.env.KIELER_SERVER_DIR ?? path.join(extension, 'server')
-    const classpath = ['diagnostics.jar', 'jetty10/*', 'kieler-language-server.jar'].map(file => path.join(serverDir, file)).join(path.delimiter)
+    const { classpath, java, serverArgs } = require('./server-launch.cjs')
+    // The two source-launcher checks below need a JDK (`java File.java`), so they always use PATH's java.
     const closedDiagram = spawnSync('java', ['-cp', classpath, path.join(__dirname, 'fixtures/DiagramRefreshCheck.java')], { encoding: 'utf8' })
     assert.equal(closedDiagram.status, 0, closedDiagram.stderr)
     const reentrant = spawnSync('java', ['-cp', classpath, path.join(__dirname, 'fixtures/MainThreadCheck.java')], { encoding: 'utf8', timeout: 60000 })
     assert.equal(reentrant.status, 0, reentrant.stderr || 'MainThreadCheck timed out')
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-diagnostics-'))
-    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', classpath, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: workspace })
+    const server = spawn(java, serverArgs, { cwd: workspace })
     const closed = new Promise(resolve => server.once('close', resolve))
     let stderr = ''
     server.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-12000) })

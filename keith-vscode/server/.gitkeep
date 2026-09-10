@@ -1,2 +1,2 @@
-Place your the language server jar for each plattform in this folder. They
-will be picked up by the extension.
+The language server JAR is built here by `yarn build:server` (scripts/build-server.cjs) from the
+sccharts-lite fork; it is not tracked in git.

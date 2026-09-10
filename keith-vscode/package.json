@@ -2,7 +2,7 @@
   "name": "sccharts-lab",
   "displayName": "SCCharts Lab",
   "description": "Edit, visualise, simulate tick by tick, and debug SCCharts models in VS Code. Independent fork of the KIELER VS Code extension (keith-vscode).",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "publisher": "qinnovate",
   "author": "Jasper Miller-Waugh",
   "contributors": [
@@ -411,6 +411,21 @@
         "title": "Save All Generated Files...",
         "category": "SCCharts",
         "icon": "$(save-all)"
+      },
+      {
+        "command": "keith-vscode.runtime.showInfo",
+        "title": "Show Java runtime and C compiler in use",
+        "category": "SCCharts Lab"
+      },
+      {
+        "command": "keith-vscode.runtime.downloadCToolchain",
+        "title": "Download C toolchain (w64devkit, Windows)",
+        "category": "SCCharts Lab"
+      },
+      {
+        "command": "keith-vscode.runtime.removeCToolchain",
+        "title": "Remove downloaded C toolchain",
+        "category": "SCCharts Lab"
       }
     ],
     "menus": {
@@ -550,6 +565,17 @@
         {
           "command": "keith-vscode.save-all-generated-code",
           "when": "resourceScheme == sccharts-generated"
+        },
+        {
+          "command": "keith-vscode.runtime.showInfo"
+        },
+        {
+          "command": "keith-vscode.runtime.downloadCToolchain",
+          "when": "isWindows"
+        },
+        {
+          "command": "keith-vscode.runtime.removeCToolchain",
+          "when": "isWindows"
         }
       ],
       "editor/title": [
@@ -712,6 +738,18 @@
           "type": "boolean",
           "default": false,
           "description": "Specifies whether internal variables shall be shown in the simulation widget (e.g. guards, ...)."
+        },
+        "keith-vscode.javaHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Java installation (JDK or JRE, version 21 or newer) to run the SCCharts language server with. Leave empty to use the runtime bundled with platform builds of the extension, then `JDK_HOME`, `JAVA_HOME` and finally `java` on PATH. Java simulation needs a JDK here because it compiles with `javac`. Takes effect on the next server restart or window reload."
+        },
+        "keith-vscode.cCompilerPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "C compiler for C simulation and code checks, as a full path or a program name on PATH (GCC-compatible command line). Leave empty to use the toolchain downloaded by SCCharts Lab on Windows, or `gcc` on PATH. Takes effect on the next server restart."
         }
       }
     },
@@ -753,13 +791,14 @@
     "lint": "eslint .",
     "lint-fix": "eslint --fix .",
     "test": "node --test test/*.test.cjs",
-    "test:server": "npm run build:server && node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs",
-    "build": "node scripts/build-server-patch.cjs && webpack --mode production",
+    "test:server": "node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs",
+    "build": "webpack --mode production",
     "watch": "webpack --watch",
-    "package": "vsce package --yarn -o sccharts-lab.vsix",
+    "package": "node scripts/package-extension.cjs",
+    "package:platform": "node scripts/package-extension.cjs",
     "vscode:prepublish": "yarn run build",
-    "build:server": "node scripts/build-server-patch.cjs --required",
-    "fetch-server": "node scripts/fetch-server.cjs"
+    "build:server": "node scripts/build-server.cjs --required",
+    "build:jre": "node scripts/build-jre.cjs --host"
   },
   "devDependencies": {
     "@types/node": "^16.11.7",

@@ -16,11 +16,9 @@ const model = `scchart Review {
 }`
 
 async function main() {
-    const extension = path.resolve(__dirname, '..')
-    const serverDir = process.env.KIELER_SERVER_DIR ?? path.join(extension, 'server')
+    const { java, serverArgs } = require('./server-launch.cjs')
     const workspace = fs.mkdtempSync(path.join(tmpdir(), 'kieler-codegen-'))
-    const classpath = ['diagnostics.jar', 'jetty10/*', 'kieler-language-server.jar'].map(file => path.join(serverDir, file)).join(path.delimiter)
-    const server = spawn('java', ['-Djava.awt.headless=true', '-cp', classpath, 'de.cau.cs.kieler.language.server.LanguageServer'], { cwd: workspace })
+    const server = spawn(java, serverArgs, { cwd: workspace })
     const closed = new Promise(resolve => server.once('close', resolve))
     let stderr = ''
     server.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-8000) })

@@ -474,7 +474,17 @@ export class SimulationTableDataProvider {
     }
 
     /** Compiles the saved model for simulation; the compilation-finished event starts the run. */
+    /**
+     * Checks that the tools the build needs are present (and may install them) before the compile request
+     * is sent. Set by the extension; a false result cancels the build quietly, the hook has already reported.
+     */
+    prepareBuild?: (systemId: string, label?: string) => Promise<boolean>
+
     private async startBuild(document: vscode.TextDocument, systemId: string, snapshot: boolean): Promise<void> {
+        if (this.prepareBuild) {
+            const label = [...this.systems, ...this.snapshotSystems].find((system) => system.id === systemId)?.label
+            if (!(await this.prepareBuild(systemId, label))) return
+        }
         this.lastError = undefined
         this.modelUri = document.uri.toString()
         this.compiledText = document.getText()

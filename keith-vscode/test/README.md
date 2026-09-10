@@ -7,14 +7,17 @@ small SCCharts fixture: compile, start, change boolean and uninitialized string
 inputs, step, stop, and restart.
 It also checks the full broken demo's scheduler cycle and exact source ranges,
 the subsequent C array error and working element-copy quick fix, embedded C errors,
-and recovery after failures. This check builds the diagnostic patch and requires a
-JDK 11 or newer, `gcc`, and the bundled server JAR and Jetty libraries.
-Set `KIELER_SERVER_DIR` to use server libraries from another checkout for the smoke test.
+and recovery after failures. It requires Java 21, `gcc`, and `server/sccharts-lite-server.jar`
+(`npm run build:server`). Set `SCCHARTS_SERVER_DIR` to a directory holding another
+`sccharts-lite-server.jar` to test a different build, and `SCCHARTS_JAVA` to the launcher the
+server should run on; `npm run build:jre` followed by
+`SCCHARTS_JAVA=server/jre/bin/java npm run test:server` exercises the bundled runtime image
+with exactly the modules that ship in the platform packages.
 
 The server suite also generates C and Java through the real protocol, checks that source
 files stay in memory, compiles exported fixtures with GCC and `javac`, and exercises invalid
 input, incompatible host code, scheduler failure and recovery. Run `node test/server-codegen.cjs`
-after `npm run build:server` for just these checks. Client tests cover virtual preview lifetime,
+for just these checks. Client tests cover virtual preview lifetime,
 Save As, grouped export, overwrite protection, save errors, cancellation and stale builds.
 
 Client tests cover diagnostic invalidation during edits, cancellation, restart,
