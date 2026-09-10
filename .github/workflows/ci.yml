@@ -26,12 +26,6 @@ jobs:
                   node-version: 24.x
             - run: yarn
 
-            - uses: actions/setup-java@v4
-              with:
-                  distribution: temurin
-                  java-version: '21'
-                  cache: maven
-
             # The language server is built from the sccharts-lite fork (KIELER's SCCharts compiler,
             # simulation and diagram server with this extension's diagnostics built in). Point
             # SCCHARTS_SERVER_REPO/SCCHARTS_SERVER_REF at the fork repository to build.
@@ -41,6 +35,13 @@ jobs:
                   repository: ${{ vars.SCCHARTS_SERVER_REPO || 'Fallstop/sccharts-lite-server' }}
                   ref: ${{ vars.SCCHARTS_SERVER_REF || 'main' }}
                   path: sccharts-lite-server
+            - uses: actions/setup-java@v5
+              with:
+                  distribution: temurin
+                  java-version: '21'
+                  # The cache key needs the fork's pom.xml, so this runs after its checkout.
+                  cache: maven
+
             - run: yarn --cwd keith-vscode build:server
               env:
                   SCCHARTS_SERVER_SRC: ${{ github.workspace }}/sccharts-lite-server
@@ -90,7 +91,7 @@ jobs:
                   cache: yarn
             - run: yarn --frozen-lockfile
             # The diagnostics suite also runs two Java source files directly, which needs a JDK on PATH.
-            - uses: actions/setup-java@v4
+            - uses: actions/setup-java@v5
               with:
                   distribution: temurin
                   java-version: '21'
