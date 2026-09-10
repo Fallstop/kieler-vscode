@@ -45,6 +45,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   or the editor context menu. Selecting an element in the diagram selects its text in the editor
   (`keith-vscode.diagram.selectText`). The server answers `keith/diagram/cursor` by mapping the
   offset to the model element and relaying out; it leaves compiler snapshots alone.
+  The reverse direction (a click in the diagram selecting the source text) is upstream sprotty
+  behaviour that is now switched on; on the Windows CI runners it is intermittently silent, so the
+  server suite only warns about it there.
 - **Hover cards, outline and timings from the language server.** Hovering a variable, signal,
   state, region, transition or action in an SCChart shows a Markdown card built from the model:
   declaration, type, initial value, scope, write/read counts, the comment above it, a state's
