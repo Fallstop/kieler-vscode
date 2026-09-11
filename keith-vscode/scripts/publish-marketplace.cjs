@@ -68,9 +68,33 @@ async function attempt(label, call, verify) {
     }
 }
 
+/**
+ * The published versions and their targets. The anonymous query API answers in under a second; the
+ * authenticated gallery lookup with IncludeVersions took 236-243 s for this extension on 2026-09-11,
+ * which is the gateway's limit, and every 0.9.0 release attempt died there before uploading anything.
+ */
+async function queryVersions() {
+    const response = await fetch('https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery', {
+        method: 'POST',
+        signal: AbortSignal.timeout(60000),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json;api-version=3.0-preview.1' },
+        body: JSON.stringify({ filters: [{ criteria: [{ filterType: 7, value: id }] }], flags: 1 /* IncludeVersions */ }),
+    })
+    if (!response.ok) throw Object.assign(new Error(`extensionquery answered HTTP ${response.status}`), { statusCode: response.status })
+    const extension = (await response.json()).results?.[0]?.extensions?.[0]
+    return extension ? { versions: extension.versions ?? [] } : null
+}
+
 async function lookup() {
+    if (typeof fetch === 'function') {
+        try {
+            return await attempt(`Looking up ${id}`, queryVersions)
+        } catch (error) {
+            console.log(`Looking up ${id} through the query API failed (${firstLine(error)}); asking the gallery instead`)
+        }
+    }
     try {
-        return await attempt(`Looking up ${id}`, () => api.getExtension(null, publisher, name, undefined, 1 /* IncludeVersions */))
+        return await attempt(`Looking up ${id} in the gallery`, () => api.getExtension(null, publisher, name, undefined, 1 /* IncludeVersions */))
     } catch (error) {
         if (error.statusCode !== 404) throw error
         return null
@@ -98,7 +122,7 @@ async function publish(vsix, existing) {
             : api.createExtension(undefined, fs.createReadStream(vsix))
         const arrived = async () => {
             try {
-                return isPublished(await api.getExtension(null, publisher, name, undefined, 1), target)
+                return isPublished(typeof fetch === 'function' ? await queryVersions() : await api.getExtension(null, publisher, name, undefined, 1), target)
             } catch {
                 return false
             }
