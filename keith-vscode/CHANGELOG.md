@@ -4,6 +4,20 @@ All notable changes to the "keith-vscode" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.9.1] - 2026-09-12
+
+- **A click in the editor no longer pulls the cursor onto the state's name.** Sprotty fires its
+  diagram selection listener for selections the server sends as well as for clicks, so the cursor
+  sync's selection was answered with `diagram/openInTextEditor` and moved the editor cursor onto the
+  selected element. Cursor-driven selections are now marked `preventOpenSelection`; clicking in the
+  diagram still reveals the source when `keith-vscode.diagram.selectText` is on. The server cursor
+  suite checks that no reveal follows a cursor request.
+- **A running simulation keeps your zoom.** Every tick relays the diagram out to move the
+  highlighting, and klighd-core refits the diagram after each model update because "Resize To Fit
+  on Refresh" defaults to on and has had no switch since the sidebar went. Model updates that arrive
+  while a simulation is running are now applied without the refit, so the viewport stays where you
+  put it; the first layout after start and everything outside a simulation fit as before.
+
 ## [0.9.0] - 2026-09-11
 
 - **Diagnostics while typing.** Open SCCharts are analysed after every edit (debounced,

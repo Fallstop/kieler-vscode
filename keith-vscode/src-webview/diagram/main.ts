@@ -36,6 +36,7 @@ import {
 } from 'sprotty-vscode-webview'
 import { DisabledKeyTool } from 'sprotty-vscode-webview/lib/disabled-keytool'
 import { VsCodeApi, VsCodeMessenger } from 'sprotty-vscode-webview/lib/services'
+import { KeithDiagramServer, SimulationRunning } from './diagram-server'
 import { KlighdDiagramWidget } from './klighd-widget'
 import { MessageConnection } from './message-connection'
 import { MessagePersistenceStorage } from './persistence-storage'
@@ -101,6 +102,9 @@ export class KLighDSprottyStarter extends SprottyStarter {
         const persistenceStorage = new MessagePersistenceStorage(this.messenger)
         const container = createKlighdDiagramContainer(diagramIdentifier.clientId)
         bindServices(container, { connection, sessionStorage, persistenceStorage })
+        // Model updates during a simulation keep the user's zoom instead of refitting the diagram.
+        container.bind(SimulationRunning).toConstantValue(() => this.simulationView.running)
+        container.rebind(TYPES.ModelSource).to(KeithDiagramServer).inSingletonScope()
         onAction(
             container,
             DIAGNOSTIC_SELECT,

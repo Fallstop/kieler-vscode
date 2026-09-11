@@ -68,6 +68,10 @@ async function main() {
         // Sprotty's protocol wraps the root; the first request is answered before every handler settled.
         await new Promise(resolve => setTimeout(resolve, 500))
 
+        // The client wants diagram clicks revealed in the editor; cursor-driven selections must still not be.
+        await connection.sendNotification('keith/preferences/setPreferences', { 'diagram.shouldSelectText': true })
+        const openedBefore = received.filter(message => message.method === 'diagram/openInTextEditor').length
+
         // 1. Cursor in EW_Phase with mode expand: NS_Phase's region is off the path and gets collapsed.
         const ewOffset = text.indexOf('leds = {0, 0, 1, 1, 0, 0}')
         assert.ok(ewOffset > 0)
@@ -122,6 +126,13 @@ async function main() {
         assert.equal(declaration.expanded, 0)
         console.log('Transitions select their edge; declarations resolve to the root state without expanding.')
 
+        // Sprotty fires its selection listener for server-sent selections too; the cursor sync marks them so the
+        // editor cursor is not pulled onto the element's name (0.9.0 did exactly that on every click).
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        const openedByCursor = received.filter(message => message.method === 'diagram/openInTextEditor').length - openedBefore
+        assert.equal(openedByCursor, 0, `cursor sync must not reveal text in the editor, got ${openedByCursor} diagram/openInTextEditor`)
+        console.log('Cursor-driven selections do not move the editor cursor.')
+
         // 4. Bad input is refused, not crashed on.
         const outside = await connection.sendRequest('keith/diagram/cursor', { uri, offset: text.length + 10, clientId: CLIENT, mode: 'focus' })
         assert.equal(outside.ok, false)
@@ -130,7 +141,6 @@ async function main() {
         assert.match(noDiagram.message, /No diagram/)
 
         // 5. Reverse direction: selecting in the diagram reveals the source once the client asks for it.
-        await connection.sendNotification('keith/preferences/setPreferences', { 'diagram.shouldSelectText': true })
         // The reverse direction is sprotty's selection listener; a click that lands while a layout update is
         // still settling can be dropped, so the test clicks again like a user would.
         let location

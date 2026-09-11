@@ -122,6 +122,11 @@ export class SimulationView {
         })
     }
 
+    /** Whether a simulation is running for the shown model. */
+    get running(): boolean {
+        return this.state?.phase === 'running'
+    }
+
     /** Call once the messenger is started, so the extension can answer with the current state. */
     connect(): void {
         this.send({ kind: 'requestState' })
