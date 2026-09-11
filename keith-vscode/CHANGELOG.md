@@ -100,6 +100,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   --generate-cds-archive` would add 27 MB to the linux-x64 image only and is not used.
   `plan/native-launcher.md` measures jpackage (+0.6 MB for a native `sccharts-server`
   launcher, six OS-specific build jobs and signing) and lists the native-image blockers.
+- **Three platform packages instead of six.** Marketplace builds with the bundled runtime now
+  cover linux-x64, darwin-arm64 and win32-x64; Intel Macs and ARM Linux or Windows get the
+  universal package and need a Java 21. The publish script uploads the universal package first,
+  retries a package the Marketplace gateway drops (with the four-minute "Services Unavailable"
+  page seen on 2026-09-11) instead of failing the whole release, and reports each call's duration.
 - **Removed the languages the server no longer serves.** KGraph (`.kgt`, `.kgx`), ELK Graph
   (`.elkt`, `.elkj`), Esterel (`.strl`), KiVis (`.kviz`) and Lustre (`.lus`) were still registered
   as languages with grammars and activation events, although the sccharts-lite server dropped them

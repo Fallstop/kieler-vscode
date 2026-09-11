@@ -173,11 +173,12 @@ SCCharts Lab is incompatible with the original **KIELER VS Code** extension
 starts its own language server. SCCharts Lab refuses to activate while that extension is
 enabled. Disable or uninstall it, then reload the window.
 
-**Nothing else to install on Windows, macOS or Linux** when the extension comes from the
-Marketplace or Open VSX: those builds are platform-specific and ship their own Java runtime, a
-30 MB [jlink](https://docs.oracle.com/en/java/javase/21/docs/specs/man/jlink.html) image of
-Eclipse Temurin 21 with only the modules the language server uses. The universal `.vsix`
-(GitHub releases, `yarn package`) carries no runtime and needs Java 21 or newer, found through
+**Nothing else to install on Windows x64, Apple Silicon or Linux x64** when the extension comes
+from the Marketplace or Open VSX: those builds are platform-specific and ship their own Java
+runtime, a 30 MB [jlink](https://docs.oracle.com/en/java/javase/21/docs/specs/man/jlink.html)
+image of Eclipse Temurin 21 with only the modules the language server uses. Other platforms
+(Intel Macs, ARM Linux, ARM Windows) receive the universal package, which, like the universal
+`.vsix` from GitHub releases and `yarn package`, carries no runtime and needs Java 21 or newer, found through
 the `keith-vscode.javaHome` setting, `JDK_HOME`, `JAVA_HOME`, or `java` on PATH, in that order.
 **SCCharts Lab: Show Java runtime and C compiler in use** tells you which one was picked.
 
@@ -245,7 +246,8 @@ linked runtime; it is how the startup cache's flags were chosen (see the changel
 Releases are published by tagging `vX.Y.Z` (matching `package.json`) on GitHub; a `vX.Y.Z-pre`
 tag publishes the same version as a pre-release (GitHub pre-release, Marketplace and Open VSX
 pre-release channel). Either runs `.github/workflows/release.yml`: it builds the server, runs every check on the system JDK and on
-the linked runtime (Linux and Windows, the latter with a downloaded w64devkit), packages all
-seven `.vsix` files, attaches them to the GitHub release and publishes them to the Marketplace
-and Open VSX. CI checks the server sources out of the repository named by the
+the linked runtime (Linux and Windows, the latter with a downloaded w64devkit), packages the
+four `.vsix` files (universal, linux-x64, darwin-arm64, win32-x64), attaches them to the GitHub
+release and publishes them to the Marketplace and Open VSX, smallest first, retrying a package
+whose upload the Marketplace gateway drops; a rerun skips packages that already arrived. CI checks the server sources out of the repository named by the
 `SCCHARTS_SERVER_REPO` variable.

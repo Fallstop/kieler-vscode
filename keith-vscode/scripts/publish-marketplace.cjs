@@ -31,9 +31,46 @@ function targetOf(file) {
     return TARGETS.find((target) => base.endsWith(`-${target}`))
 }
 
+const RETRY_DELAYS_MS = (process.env.PUBLISH_RETRY_DELAYS ?? '30000,60000,120000').split(',').map(Number)
+const sleep = (ms) => new Promise((resolve) => (typeof setTimeout === 'function' ? setTimeout(resolve, ms) : resolve()))
+
+/** An error the Marketplace gateway produces while it is unwell, as opposed to a rejection of the request. */
+function isTransient(error) {
+    if (error.statusCode === undefined) return true // socket errors, timeouts, resets
+    if (error.statusCode >= 500) return true
+    return /Services Unavailable|ECONNRESET|ETIMEDOUT|socket hang up/i.test(String(error.message))
+}
+
+function firstLine(error) {
+    const text = String(error?.message ?? error)
+    const html = text.match(/<title>([^<]*)<\/title>/)
+    return (html ? html[1] : text.split('\n')[0]).trim()
+}
+
+/** Runs one Marketplace call, retrying gateway failures with a growing pause and logging every attempt's duration. */
+async function attempt(label, call, verify) {
+    for (let index = 0; ; index++) {
+        const started = Date.now()
+        try {
+            const result = await call()
+            console.log(`${label}: done in ${Math.round((Date.now() - started) / 1000)}s`)
+            return result
+        } catch (error) {
+            const seconds = Math.round((Date.now() - started) / 1000)
+            if (verify && (await verify())) {
+                console.log(`${label}: the request failed after ${seconds}s but the Marketplace shows the result; continuing.`)
+                return undefined
+            }
+            if (!isTransient(error) || index >= RETRY_DELAYS_MS.length) throw error
+            console.log(`${label}: attempt ${index + 1} failed after ${seconds}s (${error.statusCode ?? 'no status'}: ${firstLine(error)}); retrying in ${RETRY_DELAYS_MS[index] / 1000}s`)
+            await sleep(RETRY_DELAYS_MS[index])
+        }
+    }
+}
+
 async function lookup() {
     try {
-        return await api.getExtension(null, publisher, name, undefined, 1 /* IncludeVersions */)
+        return await attempt(`Looking up ${id}`, () => api.getExtension(null, publisher, name, undefined, 1 /* IncludeVersions */))
     } catch (error) {
         if (error.statusCode !== 404) throw error
         return null
@@ -52,10 +89,21 @@ async function publish(vsix, existing) {
         return existing
     }
     const started = Date.now()
-    console.log(`${existing ? 'Updating' : 'Creating'} ${label} from ${path.basename(vsix)}...`)
+    const size = fs.statSync ? `${(fs.statSync(vsix).size / 1e6).toFixed(1)} MB` : ''
+    console.log(`${existing ? 'Updating' : 'Creating'} ${label} from ${path.basename(vsix)} ${size}...`)
     try {
-        if (existing) await api.updateExtension(undefined, fs.createReadStream(vsix), publisher, name)
-        else await api.createExtension(undefined, fs.createReadStream(vsix))
+        // A retry only re-uploads when the previous attempt's package did not arrive after all.
+        const upload = () => existing
+            ? api.updateExtension(undefined, fs.createReadStream(vsix), publisher, name)
+            : api.createExtension(undefined, fs.createReadStream(vsix))
+        const arrived = async () => {
+            try {
+                return isPublished(await api.getExtension(null, publisher, name, undefined, 1), target)
+            } catch {
+                return false
+            }
+        }
+        await attempt(`Uploading ${path.basename(vsix)}`, upload, arrived)
     } catch (error) {
         if (error.statusCode === 409 && isPublished(await lookup(), target)) {
             console.log(`${label} already exists.`)
@@ -71,7 +119,10 @@ async function publish(vsix, existing) {
 
 async function main() {
     let existing = await lookup()
-    for (const vsix of files) {
+    // The universal package is the smallest, so it goes first: a cheap probe of the gateway before the 55-60 MB
+    // platform packages.
+    const ordered = [...files].sort((a, b) => (targetOf(a) ? 1 : 0) - (targetOf(b) ? 1 : 0))
+    for (const vsix of ordered) {
         // eslint-disable-next-line no-await-in-loop
         existing = await publish(vsix, existing)
     }
@@ -84,7 +135,11 @@ main().catch((error) => {
             'with Marketplace > Manage scope, from an account allowed to publish for this publisher. ' +
             'Then rerun the failed release job; the GitHub VSIX is already available if its release step succeeded.')
     } else {
+        console.error(firstLine(error))
         console.error(error.message || error)
     }
-    process.exit(1)
+    // Let stdout drain before exiting: process.exit truncates buffered output on a pipe, which hid
+    // which Marketplace call had failed.
+    if (process.stdout && typeof process.stdout.write === 'function') process.stdout.write('', () => process.exit(1))
+    else process.exit(1)
 })

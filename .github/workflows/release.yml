@@ -90,7 +90,9 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                target: [universal, linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64, win32-arm64]
+                # Bundled-runtime builds for the platforms in use; everything else installs the universal
+                # package and needs a Java 21 (build-jre.cjs can still link the other four targets).
+                target: [universal, linux-x64, darwin-arm64, win32-x64]
         steps:
             - uses: actions/checkout@v4
             - uses: actions/setup-node@v4
@@ -207,7 +209,8 @@ jobs:
                   prerelease: ${{ env.PRERELEASE == 'true' }}
 
             # Not `vsce publish`: its fixed three-minute socket timeout is shorter than the
-            # Marketplace takes to process these packages. Platform packages first, universal last.
+            # Marketplace takes to process these packages. The script uploads the universal package
+            # first (smallest), retries gateway failures per package, and skips packages already there.
             - name: Publish to VS Code Marketplace
               working-directory: keith-vscode
               env:
