@@ -117,7 +117,36 @@ async function publish(vsix, existing) {
     return existing ?? {}
 }
 
+/**
+ * A quick look at the gallery with the token before any long call: the HTTP status of the extension
+ * resource tells a credential problem (401/403, or a 302 to the sign-in page for a token the gallery
+ * does not recognise) from a gateway that is unwell (5xx), which otherwise both end as a four-minute
+ * timeout on the unavailable page.
+ */
+async function preflight() {
+    if (typeof fetch !== 'function') return
+    const url = `https://marketplace.visualstudio.com/_apis/gallery/publishers/${publisher}/extensions/${name}?api-version=3.0-preview.1`
+    const started = Date.now()
+    try {
+        const response = await fetch(url, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(60000),
+            headers: { Authorization: `Basic ${Buffer.from(`:${pat}`).toString('base64')}`, Accept: 'application/json;api-version=3.0-preview.1' },
+        })
+        const seconds = Math.round((Date.now() - started) / 1000)
+        const location = response.headers.get('location') ?? ''
+        console.log(`Gallery pre-flight: HTTP ${response.status} in ${seconds}s${location ? ` (redirect to ${location.split('?')[0]})` : ''}`)
+        if (response.status === 401 || response.status === 403 || (response.status >= 300 && response.status < 400 && /signin/i.test(location))) {
+            throw Object.assign(new Error(`The Marketplace does not accept the token (HTTP ${response.status})`), { statusCode: 401 })
+        }
+    } catch (error) {
+        if (error.statusCode === 401) throw error
+        console.log(`Gallery pre-flight: ${firstLine(error)} after ${Math.round((Date.now() - started) / 1000)}s; continuing`)
+    }
+}
+
 async function main() {
+    await preflight()
     let existing = await lookup()
     // The universal package is the smallest, so it goes first: a cheap probe of the gateway before the 55-60 MB
     // platform packages.
