@@ -601,9 +601,7 @@ export class SimulationTableDataProvider {
             const { editor } = this.kico
             const systems = snapshot ? this.snapshotSystems : this.systems
             if (!editor || systems.length === 0) {
-                await vscode.window.showInformationMessage(
-                    'Open a supported model and wait for its simulation systems to load.'
-                )
+                await vscode.window.showInformationMessage('Open a model and wait for its simulation systems to load.')
                 return false
             }
             const selected = await vscode.window.showQuickPick(
@@ -1109,41 +1107,24 @@ export class SimulationTableDataProvider {
     /** Quick pick of the model's states (from the server), or a typed condition, becomes a breakpoint. */
     async addBreakpointInteractively(): Promise<void> {
         if (!this.simulationRunning || !this.modelUri) {
-            vscode.window.showInformationMessage('Start a simulation first; breakpoints belong to the simulated model.')
+            vscode.window.showInformationMessage('Start a simulation first.')
             return
         }
-        interface StateInfo {
-            name: string
-            qualified: string
-            initial: boolean
-            current: boolean
-        }
-        let states: StateInfo[] = []
-        try {
-            const listed = await this.lsClient.sendRequest<{ states: StateInfo[]; message?: string }>(
-                'keith/simulation/states',
-                { uri: this.modelUri }
-            )
-            states = listed?.states ?? []
-        } catch (error) {
-            this.output.appendLine(`[WARN]\tStates could not be listed: ${error}`)
-        }
+        const { states } = this.debugger
         const condition = '$(debug-breakpoint-conditional) When a condition holds...'
         const items: vscode.QuickPickItem[] = [
             { label: condition, detail: 'Pause after any tick in which an expression over the variables is true' },
-            ...states
-                .filter((state) => state.qualified.includes('.'))
-                .map((state) => ({
-                    label: `$(debug-breakpoint) ${state.qualified}`,
-                    description: state.current ? 'active now' : state.initial ? 'initial' : undefined,
-                    detail: `Pause when ${state.name} is entered`,
-                })),
+            ...states.map((state) => ({
+                label: `$(debug-breakpoint) ${state.qualified}`,
+                description: state.initial ? 'initial' : undefined,
+                detail: `Pause when ${state.name} is entered`,
+            })),
         ]
         const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Pause the simulation when...' })
         if (!picked) return
         if (picked.label === condition) {
             const expression = await vscode.window.showInputBox({
-                prompt: 'Condition in SCCharts expression syntax, e.g. count >= 3 && !done or pre(x) != x',
+                prompt: 'Condition, e.g. count >= 3 && !done',
                 validateInput: (value) => (value.trim() ? null : 'Enter an expression.'),
             })
             if (expression) await this.debugger.addBreakpoint({ expression })
@@ -1154,13 +1135,11 @@ export class SimulationTableDataProvider {
 
     async addWatchInteractively(): Promise<void> {
         if (!this.simulationRunning || !this.modelUri) {
-            vscode.window.showInformationMessage(
-                'Start a simulation first; watches show values of the running simulation.'
-            )
+            vscode.window.showInformationMessage('Start a simulation first.')
             return
         }
         const expression = await vscode.window.showInputBox({
-            prompt: 'Expression to show after every tick, e.g. count * 10 or pre(x) != x',
+            prompt: 'Expression to watch, e.g. count * 10',
             validateInput: (value) => (value.trim() ? null : 'Enter an expression.'),
         })
         if (expression) await this.debugger.addWatch(expression)

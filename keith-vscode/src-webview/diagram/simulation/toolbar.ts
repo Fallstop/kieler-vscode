@@ -15,7 +15,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-/* global document, HTMLElement, HTMLInputElement, KeyboardEvent */
+/* global document, HTMLElement, HTMLInputElement */
 
 import { SimulationViewCommand, SimulationViewState } from '../../../src/simulation/protocol'
 import { h, icon, replaceChildren } from './dom'
@@ -45,6 +45,7 @@ export interface ToolbarHost {
 /**
  * The transport controls along the top of the preview. One row that never wraps: on narrow panels
  * the button labels and then the slider drop away (see the media queries in simulation.css).
+ * Everything about the trace itself (saving, loading, generated symbols) lives in the drawer.
  */
 export class Toolbar {
     readonly el = h('header.kv-toolbar')
@@ -64,7 +65,6 @@ export class Toolbar {
             state.showInternal,
             state.stale,
             state.stage,
-            state.canGenerate,
             this.host.drawerOpen(),
             this.host.breakpointsOpen?.() ?? false,
             state.debug && [
@@ -89,52 +89,23 @@ export class Toolbar {
             icon('circuit-board'),
             h('span.kv-model-name', {}, state.model ?? 'KIELER Preview')
         )
-        const busy = state.phase === 'starting' || state.phase === 'stopping'
         const right = h(
             'div.kv-toolbar-right',
             {},
-            state.phase === 'running' && this.traceButtons(),
             state.phase === 'running' &&
                 state.debug &&
                 this.toggle(
                     'debug-breakpoint-conditional',
                     this.breakpointLabel(state),
                     this.host.breakpointsOpen?.() ?? false,
-                    'Pause the simulation when a state is entered or a condition holds',
+                    'Pause when a state is entered or a condition holds',
                     () => this.host.toggleBreakpoints?.(),
-                    state.debug.paused ? '.kv-btn-hit' : ''
-                ),
-            state.phase === 'running' &&
-                this.toggle(
-                    'symbol-misc',
-                    'Generated',
-                    state.showInternal,
-                    'Show guards, tick counters and other symbols the compiler added',
-                    () => this.host.send({ kind: 'setShowInternal', enabled: !state.showInternal })
+                    state.debug.paused ? '.kv-btn-hit' : '',
+                    this.breakpointCount(state)
                 ),
             state.phase === 'running' &&
                 this.toggle('layout-panel', 'Trace', this.host.drawerOpen(), 'Show the tick-by-tick trace', () =>
                     this.host.toggleDrawer()
-                ),
-            !busy &&
-                h(
-                    'div.kv-btn-group.kv-btn-group-quiet',
-                    {},
-                    this.button(
-                        'list-tree',
-                        'Stages',
-                        'Show what the compiler makes of this model, one stage at a time',
-                        () => this.host.send({ kind: 'showStage' }),
-                        '.kv-btn-quiet'
-                    ),
-                    state.canGenerate &&
-                        this.button(
-                            'code',
-                            'Code',
-                            'Generate C or Java from this model and open it in the editor',
-                            () => this.host.send({ kind: 'generateCode' }),
-                            '.kv-btn-quiet'
-                        )
                 )
         )
         replaceChildren(this.el, model, state.stage ? this.stageBar(state) : this.middle(state), right)
@@ -149,8 +120,14 @@ export class Toolbar {
         return h(
             'div.kv-toolbar-middle.kv-stage',
             {},
-            this.button('arrow-left', 'Model', 'Show the model diagram again', () =>
-                this.host.send({ kind: 'showModel' })
+            this.button(
+                'arrow-left',
+                'Model',
+                'Show the model diagram again',
+                () => this.host.send({ kind: 'showModel' }),
+                '',
+                false,
+                true
             ),
             h(
                 'span.kv-stage-name',
@@ -183,10 +160,11 @@ export class Toolbar {
                 this.button(
                     'play',
                     'Simulate…',
-                    'Compile the model with a simulation system and step through it tick by tick',
+                    'Compile with a simulation system and step through it tick by tick',
                     () => this.host.send({ kind: 'start' }),
                     '.kv-btn-primary',
-                    !state.canStart
+                    !state.canStart,
+                    true
                 ),
                 state.error && h('span.kv-error', { title: state.error, role: 'alert' }, icon('warning'), state.error)
             )
@@ -196,105 +174,75 @@ export class Toolbar {
                 ? this.button(
                       'debug-pause',
                       'Pause',
-                      'Stop running ticks automatically (R)',
+                      'Pause (R)',
                       () => this.host.send({ kind: 'pause' }),
-                      '.kv-btn-active.kv-btn-playback'
+                      '.kv-btn-active'
                   )
-                : this.button(
-                      'debug-start',
-                      'Run',
-                      'Run ticks automatically, one every delay (R)',
-                      () => this.host.send({ kind: 'play' }),
-                      '.kv-btn-playback'
+                : this.button('debug-start', 'Run', 'Run ticks until paused or a breakpoint fires (R)', () =>
+                      this.host.send({ kind: 'play' })
                   )
         return h(
             'div.kv-toolbar-middle',
             {},
-            h(
-                'div.kv-btn-group',
-                {},
-                // Once the model was edited, starting the old build over is never what is wanted.
-                state.stale
-                    ? this.button(
-                          'sync',
-                          'Rebuild',
-                          'The model was edited after this simulation was built: compile it again and start over from tick 0',
-                          () => this.host.send({ kind: 'rebuild' }),
-                          '.kv-btn-stale'
-                      )
-                    : this.button(
-                          'debug-restart',
-                          'Restart',
-                          'Start over from tick 0 with the same compiled model',
-                          () => this.host.send({ kind: 'restart' })
-                      ),
-                this.button(
-                    'debug-step-back',
-                    'Back',
-                    state.debug?.traceLoaded
-                        ? 'A loaded trace drives the inputs, so ticks cannot be replayed'
-                        : 'Go back one tick: the run is replayed with the same inputs (Backspace)',
-                    () => this.host.send({ kind: 'stepBack' }),
-                    '',
-                    state.playing || !state.debug?.canStepBack || !!state.debug?.runningToBreakpoint
-                ),
-                this.button(
-                    'debug-step-over',
-                    'Step',
-                    'Execute exactly one tick (Space)',
-                    () => this.host.send({ kind: 'step' }),
-                    '',
-                    state.playing || !!state.debug?.runningToBreakpoint
-                ),
-                runOrPause,
-                this.continueButton(state),
-                this.button('debug-stop', 'Stop', 'End the simulation and clear the trace', () =>
-                    this.host.send({ kind: 'stop' })
-                )
+            // Once the model was edited, starting the old build over is never what is wanted.
+            state.stale
+                ? this.button(
+                      'sync',
+                      'Rebuild',
+                      'The model was edited: compile it again and start over from tick 0',
+                      () => this.host.send({ kind: 'rebuild' }),
+                      '.kv-btn-stale',
+                      false,
+                      true
+                  )
+                : this.button('debug-restart', 'Restart', 'Start over from tick 0', () =>
+                      this.host.send({ kind: 'restart' })
+                  ),
+            this.button(
+                'debug-step-back',
+                'Back',
+                state.debug?.traceLoaded
+                    ? 'A loaded trace drives the inputs, so ticks cannot be replayed'
+                    : 'Back one tick (Backspace)',
+                () => this.host.send({ kind: 'stepBack' }),
+                '',
+                state.playing || !state.debug?.canStepBack || !!state.debug?.runningToBreakpoint
             ),
+            this.button(
+                'debug-step-over',
+                'Step',
+                'One tick (Space)',
+                () => this.host.send({ kind: 'step' }),
+                '',
+                state.playing || !!state.debug?.runningToBreakpoint
+            ),
+            runOrPause,
+            this.button('debug-stop', 'Stop', 'End the simulation', () => this.host.send({ kind: 'stop' })),
             h(
                 'div.kv-tick',
-                { title: 'One tick is one reaction of the model: read inputs, take transitions, write outputs' },
+                { title: 'Tick: one reaction of the model' },
                 h('span.kv-tick-label', {}, 'Tick'),
-                h('span.kv-tick-value', {}, String(state.tick)),
-                h(`span.kv-live${state.playing ? '.kv-live-on' : ''}`, { title: 'Ticks are running automatically' })
+                h('span.kv-tick-value', {}, String(state.tick))
             ),
             this.delay(state)
         )
     }
 
-    /** "Delay [200] ms" plus a slider; both set the pause between ticks while running. */
+    /** One slider for the pause between ticks; the tooltip shows the value. */
     private delay(state: SimulationViewState): HTMLElement {
-        const title = 'Pause between ticks while running'
-        const number = h('input.kv-delay-ms', {
-            type: 'number',
-            min: 0,
-            step: 10,
-            value: state.stepDelay,
-            title,
-            'aria-label': 'Delay between ticks in milliseconds',
-            'data-control': 'delay-ms',
-            onchange: (event) => {
-                const delay = Number((event.target as HTMLInputElement).value)
-                if (Number.isFinite(delay)) {
-                    this.host.send({ kind: 'setStepDelay', delay })
-                }
-            },
-            onkeydown: (event) => {
-                if ((event as KeyboardEvent).key === 'Enter') (event.target as HTMLInputElement).blur()
-                event.stopPropagation()
-            },
-        })
+        const title = (ms: number) => `Speed: ${ms} ms between ticks while running`
         const slider = h('input.kv-delay-slider', {
             type: 'range',
             min: 0,
             max: 100,
             value: delayToSlider(state.stepDelay),
-            title,
-            'aria-label': 'Delay between ticks',
+            title: title(state.stepDelay),
+            'aria-label': 'Delay between ticks in milliseconds',
+            'aria-valuetext': `${state.stepDelay} ms`,
             'data-control': 'delay',
             oninput: (event) => {
-                number.value = String(sliderToDelay(Number((event.target as HTMLInputElement).value)))
+                const target = event.target as HTMLInputElement
+                target.title = title(sliderToDelay(Number(target.value)))
             },
             onchange: (event) => {
                 this.host.send({
@@ -302,93 +250,54 @@ export class Toolbar {
                     delay: sliderToDelay(Number((event.target as HTMLInputElement).value)),
                 })
             },
+            onkeydown: (event) => event.stopPropagation(),
         })
-        return h(
-            'div.kv-delay',
-            { title },
-            h('span.kv-delay-label', {}, 'Delay'),
-            number,
-            h('span.kv-delay-unit', {}, 'ms'),
-            slider
-        )
+        return h('div.kv-delay', {}, slider)
     }
 
-    private traceButtons(): HTMLElement {
-        return h(
-            'div.kv-btn-group.kv-btn-group-quiet',
-            {},
-            this.iconButton('save', 'Save the trace so far as a .ktrace file', () =>
-                this.host.send({ kind: 'saveTrace' })
-            ),
-            this.iconButton('folder-opened', 'Load a .ktrace file to replay', () =>
-                this.host.send({ kind: 'loadTrace' })
-            )
-        )
-    }
-
-    /** "Continue" steps on the server until a breakpoint fires; while it runs the button pauses it. */
-    private continueButton(state: SimulationViewState): HTMLElement {
-        const armed = (state.debug?.breakpoints ?? []).some((breakpoint) => breakpoint.enabled && !breakpoint.error)
-        if (state.debug?.runningToBreakpoint) {
-            return this.button(
-                'debug-pause',
-                'Stop run',
-                'Stop stepping towards the next breakpoint',
-                () => this.host.send({ kind: 'pause' }),
-                '.kv-btn-active'
-            )
-        }
-        return this.button(
-            'debug-continue',
-            'Continue',
-            armed
-                ? 'Run ticks as fast as possible until a breakpoint fires (C)'
-                : 'Add a breakpoint first, then run until it fires',
-            () => this.host.send({ kind: 'runToBreakpoint' }),
-            '',
-            state.playing || !armed
-        )
+    private breakpointCount(state: SimulationViewState): number {
+        return (state.debug?.breakpoints ?? []).filter((breakpoint) => breakpoint.enabled).length
     }
 
     private breakpointLabel(state: SimulationViewState): string {
-        const count = (state.debug?.breakpoints ?? []).filter((breakpoint) => breakpoint.enabled).length
+        const count = this.breakpointCount(state)
         return count ? `Breakpoints (${count})` : 'Breakpoints'
     }
 
+    /** An icon button; the label is its tooltip and accessible name, shown as text only when asked. */
     private button(
         iconName: string,
         label: string,
         title: string,
         onclick: () => void,
         extra = '',
-        disabled = false
+        disabled = false,
+        showLabel = false
     ): HTMLElement {
         return h(
             `button.kv-btn${extra}`,
             {
                 type: 'button',
-                title: `${label}: ${title}`,
+                title: title.startsWith(label) ? title : `${label}: ${title}`,
                 onclick,
                 disabled,
                 'aria-label': label,
                 'data-control': label === 'Run' || label === 'Pause' ? 'playback' : label,
             },
             icon(iconName),
-            h('span.kv-btn-label', {}, label)
+            showLabel && h('span.kv-btn-label', {}, label)
         )
     }
 
-    private iconButton(iconName: string, title: string, onclick: () => void): HTMLElement {
-        return h('button.kv-btn.kv-btn-icon', { type: 'button', title, 'aria-label': title, onclick }, icon(iconName))
-    }
-
+    /** An icon toggle; a count, when given, sits next to the icon as a small badge. */
     private toggle(
         iconName: string,
         label: string,
         on: boolean,
         title: string,
         onclick: () => void,
-        extra = ''
+        extra = '',
+        count = 0
     ): HTMLElement {
         // The breakpoint count changes the label; the control key stays stable so focus survives a rerender.
         const control = label.startsWith('Breakpoints') ? 'Breakpoints' : label
@@ -403,7 +312,7 @@ export class Toolbar {
                 onclick,
             },
             icon(iconName),
-            h('span.kv-btn-label', {}, label)
+            count > 0 && h('span.kv-badge', {}, String(count))
         )
     }
 }

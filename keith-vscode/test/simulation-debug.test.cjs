@@ -214,11 +214,12 @@ const debug = (patch = {}) => ({
     canStepBack: true,
     runningToBreakpoint: false,
     traceLoaded: false,
+    states: [],
     ...patch,
 })
 const viewState = (patch = {}) => ({ phase: 'running', canStart: true, modelUri: 'file:///m.sctx', tick: 3, firstTick: 1, playing: false, stepDelay: 200, showInternal: false, variables: [variable()], debug: debug(), ...patch })
 
-test('the toolbar offers Back, Continue and the breakpoint list, and disables them while running', (t) => {
+test('the toolbar offers Back and the breakpoint list with its count, and disables them while running', (t) => {
     const load = webview(t)
     const { Toolbar } = load('src-webview/diagram/simulation/toolbar.ts')
     const sent = []
@@ -228,20 +229,20 @@ test('the toolbar offers Back, Continue and the breakpoint list, and disables th
     toolbar.render(viewState())
     const button = (label) => toolbar.el.querySelector(`button[aria-label="${label}"]`)
     assert.ok(!button('Back').disabled)
-    assert.ok(!button('Continue').disabled, 'one enabled, accepted breakpoint arms Continue')
     button('Back').click()
-    button('Continue').click()
-    assert.deepEqual(sent.map((command) => command.kind), ['stepBack', 'runToBreakpoint'])
+    assert.deepEqual(sent.map((command) => command.kind), ['stepBack'])
+    assert.equal(button('Continue'), null, 'Continue is the C key, not a button')
     assert.equal(button('Breakpoints (2)').getAttribute('data-control'), 'Breakpoints')
+    assert.equal(button('Breakpoints (2)').querySelector('.kv-badge').textContent, '2')
     button('Breakpoints (2)').click()
     assert.equal(open, true)
 
     toolbar.render(viewState({ debug: debug({ runningToBreakpoint: true }) }))
     assert.ok(button('Back').disabled)
     assert.ok(button('Step').disabled)
-    assert.ok(button('Stop run'), 'Continue turns into Stop run while the server steps')
+    assert.ok(button('Pause'), 'Run turns into Pause while the server steps to a breakpoint')
     toolbar.render(viewState({ debug: debug({ breakpoints: [] }) }))
-    assert.ok(button('Continue').disabled, 'nothing to run to without breakpoints')
+    assert.equal(button('Breakpoints').querySelector('.kv-badge'), null, 'no badge without breakpoints')
     toolbar.render(viewState({ tick: 0, debug: debug({ canStepBack: false }) }))
     assert.ok(button('Back').disabled)
 })
@@ -252,7 +253,7 @@ test('the breakpoint panel lists, toggles, removes and adds breakpoints; watches
     const sent = []
     const panel = new BreakpointPanel((command) => sent.push(command))
     document.body.append(panel.el)
-    panel.render(debug({ paused: { id: 'b1', kind: 'state', label: 'Entered state Full', step: 3 } }))
+    panel.render(viewState({ debug: debug({ paused: { id: 'b1', kind: 'state', label: 'Entered state Full', step: 3 } }) }))
     const items = panel.el.querySelectorAll('li')
     assert.equal(items.length, 2)
     assert.ok(items[0].classList.contains('kv-debug-hit'))
@@ -274,9 +275,40 @@ test('the breakpoint panel lists, toggles, removes and adds breakpoints; watches
     ])
     assert.equal(stateEntry.value, '', 'the entry clears after adding')
 
+    // The state entry completes against the server's state list: typing filters, Enter takes the first match.
+    panel.render(viewState({ debug: debug({ states: [{ name: 'Root', qualified: 'Root.Tick', initial: true }, { name: 'Full', qualified: 'Root.Full' }] }) }))
+    const picker = panel.el.querySelector('input[data-control="bp-state"]')
+    picker.focus()
+    picker.value = 'fu'
+    picker.dispatchEvent(new window.Event('input', { bubbles: true }))
+    const shown = [...panel.el.querySelectorAll('.kv-combo-item .kv-combo-label')].map((item) => item.textContent)
+    assert.deepEqual(shown, ['Root.Full'], 'matches are filtered case-insensitively')
+    picker.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    assert.deepEqual(sent.at(-1), { kind: 'addBreakpoint', state: 'Root.Full' })
+    assert.equal(picker.value, '', 'the picker resets after adding')
+    assert.equal(panel.el.querySelector('.kv-debug-hint'), null, 'no explanatory paragraph')
+
+    // Condition entries complete the word at the caret with the simulation's variables and pre().
+    const condition = panel.el.querySelector('input[data-control="bp-condition"]')
+    condition.focus()
+    condition.value = 'co'
+    condition.setSelectionRange(2, 2)
+    condition.dispatchEvent(new window.Event('input', { bubbles: true }))
+    const offered = [...panel.el.querySelectorAll('.kv-combo-item .kv-combo-label')].map((item) => item.textContent)
+    assert.deepEqual(offered, ['count'], 'the variable matching the typed prefix')
+    condition.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    condition.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    assert.equal(condition.value, 'count', 'a highlighted suggestion completes the word instead of submitting')
+    condition.value = 'count > 1 && pr'
+    condition.setSelectionRange(15, 15)
+    condition.dispatchEvent(new window.Event('input', { bubbles: true }))
+    condition.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    condition.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    assert.equal(condition.value, 'count > 1 && pre(', 'pre() inserts its opening parenthesis')
+
     const watches = new WatchPanel((command) => sent.push(command))
     document.body.append(watches.el)
-    watches.render(debug())
+    watches.render(viewState())
     const chips = watches.el.querySelectorAll('.kv-watch')
     assert.equal(chips.length, 2)
     assert.match(chips[0].textContent, /count \* 10=20/)

@@ -97,12 +97,12 @@ test('tick updates leave speed sliders and number selectors mounted and focused'
     document.body.append(toolbar.el)
     toolbar.render(state({ playing: true }))
     const slider = toolbar.el.querySelector('input')
-    const select = toolbar.el.querySelector('.kv-delay-ms')
+    const select = toolbar.el.querySelector('.kv-delay-slider')
     slider.focus()
     slider.value = '75'
     toolbar.render(state({ tick: 1, playing: true }))
     assert.equal(toolbar.el.querySelector('input'), slider)
-    assert.equal(toolbar.el.querySelector('.kv-delay-ms'), select)
+    assert.equal(toolbar.el.querySelector('.kv-delay-slider'), select)
     assert.equal(document.activeElement, slider)
     assert.equal(slider.value, '75')
     assert.equal(toolbar.el.querySelector('.kv-tick-value').textContent, '1')
@@ -129,7 +129,7 @@ test('Space respects buttons and selectors, ignores key repeats, and hidden view
     const step = document.querySelector('[aria-label="Step"]')
     const key = (target, options = {}) => target.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true, ...options }))
     key(step)
-    key(document.querySelector('.kv-delay-ms'))
+    key(document.querySelector('.kv-delay-slider'))
     key(document.body, { repeat: true })
     assert.equal(sent.length, 0)
     key(document.body)
@@ -137,6 +137,26 @@ test('Space respects buttons and selectors, ignores key repeats, and hidden view
     Object.defineProperty(document, 'hidden', { value: false, configurable: true })
     document.dispatchEvent(new window.Event('visibilitychange'))
     assert.deepEqual(sent.pop(), { kind: 'requestState', modelUri })
+})
+
+test('the trace drawer carries the generated-symbols toggle and the trace save and load buttons', () => {
+    const { SimulationView } = load('src-webview/diagram/simulation/view.ts')
+    const sent = []
+    let update
+    new SimulationView({ onNotification: (_, handler) => { update = handler }, sendNotification: (_, __, command) => sent.push(command) })
+    update(state({ tick: 2 }))
+    const tools = document.querySelector('.kv-drawer .kv-drawer-tools')
+    assert.ok(tools, 'the tools sit inside the drawer')
+    for (const label of ['Generated', 'Save', 'Load']) {
+        assert.equal(document.querySelectorAll(`[aria-label="${label}"]`).length, 1, `${label} appears once, in the drawer`)
+        assert.ok(tools.contains(document.querySelector(`[aria-label="${label}"]`)))
+    }
+    tools.querySelector('[aria-label="Generated"]').click()
+    tools.querySelector('[aria-label="Save"]').click()
+    tools.querySelector('[aria-label="Load"]').click()
+    assert.deepEqual(sent.map((command) => command.kind), ['setShowInternal', 'saveTrace', 'loadTrace'])
+    assert.equal(sent[0].enabled, true)
+    assert.equal(document.querySelector('.kv-toolbar [aria-label="Trace"]').getAttribute('aria-pressed'), 'true')
 })
 
 test('switching previews clears the old trace, error, and unfinished input edit', () => {
@@ -191,17 +211,15 @@ test('a shown compiler stage replaces the transport controls with a way back to 
     document.body.append(toolbar.el)
     toolbar.render(state({ phase: 'idle', canGenerate: true }))
     assert.ok(toolbar.el.querySelector('[aria-label="Simulate…"]'))
-    assert.ok(toolbar.el.querySelector('[aria-label="Stages"]'))
-    toolbar.el.querySelector('[aria-label="Code"]').click()
-    assert.deepEqual(sent, ['generateCode'])
+    // Stages and Code live in the editor title, not on the bar.
+    assert.equal(toolbar.el.querySelector('[aria-label="Stages"]'), null)
+    assert.equal(toolbar.el.querySelector('[aria-label="Code"]'), null)
     toolbar.render(state({ phase: 'idle', canGenerate: false, stage: { name: 'C Code', position: 39, count: 46 } }))
     assert.equal(toolbar.el.querySelector('[aria-label="Simulate…"]'), null)
-    assert.equal(toolbar.el.querySelector('[aria-label="Code"]'), null)
     assert.equal(toolbar.el.querySelector('.kv-stage-value').textContent, 'C Code')
     assert.equal(toolbar.el.querySelector('.kv-stage-label').textContent, 'Stage 39/46')
     toolbar.el.querySelector('[aria-label="Model"]').click()
-    toolbar.el.querySelector('[aria-label="Stages"]').click()
-    assert.deepEqual(sent, ['generateCode', 'showModel', 'showStage'])
+    assert.deepEqual(sent, ['showModel'])
     // While running with a stage shown the tick stays visible; back on the model the controls return.
     toolbar.render(state({ tick: 5, stage: { name: 'SCG', position: 33, count: 46 } }))
     assert.match(toolbar.el.querySelector('.kv-stage').textContent, /Tick 5/)
@@ -216,7 +234,7 @@ test('an edited model turns Restart into Rebuild until the simulation is built a
     const toolbar = new Toolbar({ send: (command) => sent.push(command.kind), toggleDrawer() {}, drawerOpen: () => false })
     document.body.append(toolbar.el)
     toolbar.render(state({ tick: 3 }))
-    assert.match(toolbar.el.querySelector('[aria-label="Restart"]').title, /same compiled model/)
+    assert.match(toolbar.el.querySelector('[aria-label="Restart"]').title, /Start over from tick 0/)
     assert.equal(toolbar.el.querySelector('[aria-label="Rebuild"]'), null)
     toolbar.render(state({ tick: 3, stale: true }))
     assert.equal(toolbar.el.querySelector('[aria-label="Restart"]'), null)

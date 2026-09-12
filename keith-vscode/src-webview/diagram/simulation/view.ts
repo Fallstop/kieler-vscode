@@ -31,6 +31,7 @@ import { renderSummary } from './summary'
 import { Timeline } from './timeline'
 import { Toolbar } from './toolbar'
 import { BreakpointPanel, WatchPanel, renderPauseNotice } from './debug'
+import { renderDrawerTools } from './drawer-tools'
 
 const DRAWER_KEY = 'keith.simulation.drawer'
 const DRAWER_HEIGHT_KEY = 'keith.simulation.drawerHeight'
@@ -79,6 +80,8 @@ export class SimulationView {
     private readonly drawer = h('section.kv-drawer', { hidden: true })
 
     private readonly summary = h('div.kv-summary-host')
+
+    private readonly tools = h('div.kv-drawer-tools-host')
 
     private readonly notice = h('div.kv-notice-host')
 
@@ -176,7 +179,8 @@ export class SimulationView {
             },
             onmousedown: (event) => this.startResize(event as MouseEvent),
         })
-        replaceChildren(this.drawer, handle, this.summary, this.notice, this.watches.el, this.timeline.el)
+        const header = h('div.kv-drawer-header', {}, this.summary, this.tools)
+        replaceChildren(this.drawer, handle, header, this.notice, this.watches.el, this.timeline.el)
         this.resizeDrawer(Number(readSetting(DRAWER_HEIGHT_KEY, '220')))
 
         replaceChildren(this.root, this.toolbar.el, this.breakpoints.el, container, this.drawer)
@@ -215,7 +219,7 @@ export class SimulationView {
         }
         this.state = state
         this.toolbar.render(state)
-        this.breakpoints.render(state.phase === 'running' ? state.debug : undefined)
+        this.breakpoints.render(state)
         const showDrawer = state.phase === 'running' && this.drawerOpen
         this.drawer.hidden = !showDrawer
         if (showDrawer) {
@@ -223,8 +227,12 @@ export class SimulationView {
                 this.summary,
                 renderSummary(state, (id) => this.formatFor(id))
             )
+            replaceChildren(
+                this.tools,
+                renderDrawerTools(state, (command) => this.send(command))
+            )
             replaceChildren(this.notice, renderPauseNotice(state.debug))
-            this.watches.render(state.debug)
+            this.watches.render(state)
             this.timeline.render(state)
         }
     }

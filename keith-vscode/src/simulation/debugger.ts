@@ -16,7 +16,7 @@
  */
 
 import type { Memento } from 'vscode'
-import { BreakpointPause, BreakpointState, SimulationDebugState, WatchState } from './protocol'
+import { BreakpointPause, BreakpointState, ModelStateInfo, SimulationDebugState, WatchState } from './protocol'
 
 /** The subset of the language client the debugger talks to; keeps the class testable without vscode-languageclient. */
 export interface DebugConnection {
@@ -72,6 +72,9 @@ export class SimulationDebugger {
 
     traceLoaded = false
 
+    /** The model's states as the server listed them when the simulation started. */
+    states: ModelStateInfo[] = []
+
     private modelUri: string | undefined
 
     private nextId = Date.now()
@@ -95,7 +98,17 @@ export class SimulationDebugger {
             watch.value = undefined
             watch.error = undefined
         })
+        this.states = []
         await this.sync()
+        try {
+            const listed = await this.connection.sendRequest<{ states?: ModelStateInfo[] }>('keith/simulation/states', {
+                uri: modelUri,
+            })
+            this.states = (listed?.states ?? []).filter((state) => state.qualified.includes('.'))
+        } catch {
+            // Without the list, breakpoints are still typed by name.
+        }
+        this.changed()
     }
 
     /** Forgets the running simulation's values but keeps the definitions for the next run. */
@@ -117,6 +130,7 @@ export class SimulationDebugger {
     state(tick: number): SimulationDebugState {
         return {
             breakpoints: this.breakpoints.map((breakpoint) => ({ ...breakpoint })),
+            states: this.states,
             watches: this.watches.map((watch) => ({ ...watch })),
             paused: this.paused,
             canStepBack: tick > 0 && !this.traceLoaded,

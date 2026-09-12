@@ -75,8 +75,19 @@ export interface BreakpointPause {
     step: number
 }
 
+/** A state of the simulated model, as listed by the server for the breakpoint picker. */
+export interface ModelStateInfo {
+    name: string
+    /** Dotted path from the root, unique within the model. */
+    qualified: string
+    initial?: boolean
+    current?: boolean
+}
+
 export interface SimulationDebugState {
     breakpoints: BreakpointState[]
+    /** Nested states of the model, for picking an entry breakpoint; empty when the server could not list them. */
+    states: ModelStateInfo[]
     watches: WatchState[]
     /** Set on the tick a breakpoint fired; cleared by the next tick. */
     paused?: BreakpointPause

@@ -20,9 +20,9 @@ validation while typing, hover, go to definition, outline, diagrams, compilation
 Diagram visualization and simulation are included in this extension. Open a model's
 preview to simulate, step through ticks, edit inputs, and inspect its variable trace.
 Everything lives in the editor area: there is no sidebar. The preview's toolbar carries
-**Simulate**, the transport controls, **Stages** (browse the compiler's intermediate models)
-and **Code** (generate C or Java). While a compiler stage is shown, **Model** brings the
-diagram back to the SCChart.
+**Simulate**, then the transport controls; the editor title of an SCChart offers **Stages**
+(browse the compiler's intermediate models) and **Code** (generate C or Java). While a
+compiler stage is shown, **Model** brings the diagram back to the SCChart.
 
 Editing a model while its simulation runs marks the run as out of date: **Restart** becomes
 **Rebuild**, which compiles the model again with the same simulation system and starts over
@@ -31,15 +31,17 @@ from tick 0. Unsaved edits are saved first.
 ### Breakpoints, watches and stepping back
 
 The simulation can pause itself. **Breakpoints** in the preview's toolbar opens a list where a
-breakpoint is either a state to pause on when it is entered (`Full`, or qualified as
-`Counter.Counting.Full` when several states share a name) or a condition over the variables
-that pauses after any tick in which it holds (`count >= 3 && !done`, `pre(x) != x`). The
-server validates each one and shows why one was rejected next to it. **Continue** (`C`) runs
-ticks as fast as the model allows until a breakpoint fires; a running simulation (**Run**)
-stops on a breakpoint as well. The tick the simulation paused at is marked in the trace.
+breakpoint is either a state, completed from the model's states and paused on when it is
+entered, or a condition over the variables that pauses after any tick in which it holds
+(`count >= 3 && !done`, `pre(x) != x`; the field completes variable names and `pre(`). The
+server validates each one and shows why one was rejected next to it. `C` runs ticks as fast as
+the model allows until a breakpoint fires; a running simulation (**Run**) stops on a breakpoint
+as well. The tick the simulation paused at is marked in the trace.
 
 **Watch** expressions, above the trace table, are evaluated after every tick in the same
-syntax and show their value or the reason they cannot be evaluated. Both are remembered per
+syntax and show their value or the reason they cannot be evaluated. The trace's own controls
+sit at the right end of its summary line: **Generated** shows the compiler's own symbols, and
+**Save** and **Load** write or replay a `.ktrace` file. Both are remembered per
 model, so a restarted or rebuilt simulation keeps them. The Command Palette has **Add
 simulation breakpoint...** (a pick list of the model's states, or a condition) and **Add
 simulation watch expression...**.

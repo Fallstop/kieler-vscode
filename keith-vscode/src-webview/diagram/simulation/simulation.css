@@ -128,7 +128,7 @@ body .sidebar {
 .kv-toolbar-middle {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 2px;
     flex: 0 0 auto;
 }
 
@@ -138,8 +138,8 @@ body .sidebar {
     gap: 4px;
     flex: 0 0 auto;
     margin-left: auto;
-    /* Leave room for klighd's sidebar toggle, which floats at the top right. */
-    padding-right: 44px;
+    /* klighd's sidebar toggle sits below the toolbar (see body .sidebar above), so no room is reserved. */
+    padding-right: 2px;
 }
 
 .kv-btn-group {
@@ -189,10 +189,16 @@ body .sidebar {
     padding: 0 4px;
 }
 
-/* Run and Pause share one slot; a fixed width stops the tick counter from shifting. */
-.kv-btn-playback {
-    min-width: 72px;
-    justify-content: center;
+/* Enabled breakpoints, on the toggle. */
+.kv-badge {
+    min-width: 14px;
+    padding: 0 4px;
+    border-radius: 7px;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    font-size: 0.78em;
+    line-height: 14px;
+    text-align: center;
 }
 
 .kv-btn-primary {
@@ -267,6 +273,7 @@ body .sidebar {
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
+    margin: 0 10px 0 8px;
 }
 
 .kv-tick-label {
@@ -284,28 +291,7 @@ body .sidebar {
     min-width: 3ch;
 }
 
-/* Always present so nothing shifts; only lit while running. */
-.kv-live {
-    align-self: center;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--kv-border);
-}
-
-.kv-live-on {
-    background: var(--kv-on);
-    animation: kv-pulse 1s ease-in-out infinite;
-}
-
-@keyframes kv-pulse {
-    50% {
-        opacity: 0.25;
-    }
-}
-
 @media (prefers-reduced-motion: reduce) {
-    .kv-live-on,
     .kv-spin svg {
         animation: none;
     }
@@ -318,55 +304,21 @@ body .sidebar {
     color: var(--kv-muted);
 }
 
-.kv-delay-ms {
-    width: 5ch;
-    height: 22px;
-    padding: 0 4px;
-    border: 1px solid var(--vscode-input-border, var(--kv-border));
-    border-radius: 3px;
-    background: var(--vscode-input-background);
-    color: var(--vscode-input-foreground);
-    font: inherit;
-    font-family: var(--kv-mono);
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    -moz-appearance: textfield;
-}
-
-.kv-delay-ms::-webkit-inner-spin-button,
-.kv-delay-ms::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-.kv-delay-ms:focus {
-    outline: 1px solid var(--kv-accent);
-    outline-offset: -1px;
-}
-
 .kv-delay-slider {
-    width: 70px;
+    width: 80px;
     margin: 0;
     accent-color: var(--kv-accent);
 }
 
-/* Narrow panels: drop labels, then the slider, then the model name, instead of wrapping. */
-@media (max-width: 980px) {
-    .kv-btn-label {
-        display: none;
-    }
-    .kv-btn-playback {
-        min-width: 30px;
-    }
-}
-
-@media (max-width: 760px) {
-    .kv-delay-slider {
+/* Narrow panels: the slider goes first, then the tick label and the model name, instead of wrapping. */
+@media (max-width: 520px) {
+    .kv-delay,
+    .kv-tick-label {
         display: none;
     }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 440px) {
     .kv-model-name {
         display: none;
     }
@@ -410,15 +362,46 @@ body .sidebar {
     outline: none;
 }
 
+/* The summary line with the trace's own controls at its right end. */
+.kv-drawer-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: stretch;
+    border-bottom: 1px solid var(--kv-border);
+}
+
+.kv-summary-host {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.kv-drawer-tools-host {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    border-left: 1px solid var(--kv-border);
+}
+
+.kv-drawer-tools {
+    display: inline-flex;
+    gap: 2px;
+}
+
+/* A narrow preview keeps the summary readable; the tools fall back to their icons. */
+@media (max-width: 640px) {
+    .kv-drawer-tools .kv-btn-label {
+        display: none;
+    }
+}
+
 /* One fixed-height line; long summaries scroll sideways rather than pushing the table down. */
 .kv-summary {
     display: flex;
-    flex: 0 0 auto;
     align-items: center;
     gap: 14px;
     height: 28px;
     padding: 0 10px;
-    border-bottom: 1px solid var(--kv-border);
     white-space: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
@@ -819,14 +802,16 @@ body .sidebar {
     flex: 0 0 auto;
 }
 
-.kv-debug-empty,
-.kv-debug-hint {
+.kv-debug-empty {
     margin: 0 0 8px;
     color: var(--kv-muted);
 }
 
-.kv-debug-hint {
-    margin: 8px 0 0;
+.kv-debug-add-title {
+    margin: 0 0 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--kv-border);
+    font-weight: 600;
 }
 
 .kv-debug-add {
@@ -859,6 +844,64 @@ body .sidebar {
 .kv-debug-entry:focus {
     outline: 1px solid var(--kv-accent);
     outline-offset: -1px;
+}
+
+.kv-combo {
+    position: relative;
+    min-width: 0;
+}
+
+.kv-combo-list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    z-index: 30;
+    margin: 2px 0 0;
+    padding: 2px 0;
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--kv-border);
+    border-radius: 4px;
+    background: var(--vscode-editorSuggestWidget-background, var(--kv-surface));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.kv-combo-list[hidden] {
+    display: none;
+}
+
+.kv-combo-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.kv-combo-item:hover,
+.kv-combo-active {
+    background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+    color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
+}
+
+.kv-combo-label {
+    font-family: var(--kv-mono);
+}
+
+.kv-combo-detail {
+    margin-left: auto;
+    color: var(--kv-muted);
+    font-size: 0.9em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kv-combo-active .kv-combo-detail {
+    color: inherit;
+    opacity: 0.8;
 }
 
 .kv-notice-host:empty {
@@ -950,9 +993,13 @@ body .sidebar {
     color: var(--vscode-foreground);
 }
 
-.kv-watches .kv-debug-entry {
+.kv-watches .kv-combo {
     width: 220px;
     max-width: 100%;
+}
+
+.kv-watches .kv-debug-entry {
+    width: 100%;
     height: 20px;
 }
 

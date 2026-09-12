@@ -183,6 +183,17 @@ async function main() {
         // Breakpoints replaced while running are validated against the running model.
         const ambiguous = await connection.sendRequest('keith/simulation/setBreakpoints', { breakpoints: [{ id: 'q', kind: 'state', state: 'Counting.Tick', enabled: true }] })
         assert.ok(ambiguous.accepted[0].ok, JSON.stringify(ambiguous))
+        // A state that merely stays active is not entered again: Counting was entered at tick 1 and only its
+        // child Tick is re-entered by the count loop.
+        const active = await connection.sendRequest('keith/simulation/setBreakpoints', { breakpoints: [{ id: 'counting', kind: 'state', state: 'Counting', enabled: true }] })
+        assert.ok(active.accepted[0].ok, JSON.stringify(active))
+        const entered = await step({ start: true })
+        assert.equal(entered.step, 2)
+        assert.equal(entered.breakpoint && entered.breakpoint.id, 'counting', 'tick 2 enters Counting')
+        const stillCounting = await step({ start: true })
+        assert.equal(stillCounting.step, 3)
+        assert.equal(stillCounting.breakpoint, undefined, 'an active state must not count as entered every tick')
+        console.log('State breakpoints fire on entry only, not while the state stays active.')
         const stopped = await connection.sendRequest('keith/simulation/stop')
         assert.ok(stopped.successful)
         assert.ok(!/NullPointerException|ConcurrentModificationException|Exception in thread/.test(stderr), stderr)

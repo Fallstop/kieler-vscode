@@ -17,6 +17,23 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   on Refresh" defaults to on and has had no switch since the sidebar went. Model updates that arrive
   while a simulation is running are now applied without the refit, so the viewport stays where you
   put it; the first layout after start and everything outside a simulation fit as before.
+- **Shorter messages.** Popups and diagnostic hints (instantaneous loops, scheduling cycles,
+  shared clocks, redeclared variables, missing Java or C compilers) are cut to one or two lines.
+- **A quieter preview toolbar.** Icon buttons for Restart, Back, Step, Run and Stop, the tick,
+  one speed slider (the value is its tooltip), a **Breakpoints** toggle with the count and a
+  **Trace** toggle. **Continue** is the `C` key. **Stages** and **Code** stay in the editor title
+  only. Saving and loading a trace and the **Generated** toggle moved into the trace drawer, next
+  to what they act on.
+- **Completion in the breakpoint and watch fields.** The state field completes against the
+  model's states (type a few letters, Enter takes the first match); condition and watch
+  expressions complete the word at the caret with the simulation's variables and `pre(`.
+- **Shorter hover cards for variables.** The card shows the declaration as written, its comment,
+  and how it is used ("Written 8 times, never read."); the kind, type, initial value and root
+  scope are no longer repeated in prose.
+- **State breakpoints fire on entry only.** A breakpoint on a state that merely stayed active
+  paused the simulation on every tick, because the server's state tracker compared the active
+  states against a set that never held them. The "Compiling ... with ..." popup at the start of
+  every compilation is gone; the status bar shows the progress.
 
 ## [0.9.0] - 2026-09-11
 

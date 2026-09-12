@@ -15,14 +15,16 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-/* global document, HTMLElement, HTMLInputElement, KeyboardEvent, MouseEvent */
+/* global document, HTMLElement, HTMLInputElement, MouseEvent */
 
 import {
     BreakpointState,
     SimulationDebugState,
     SimulationViewCommand,
+    SimulationViewState,
     WatchState,
 } from '../../../src/simulation/protocol'
+import { Suggestion, combobox, expressionSuggestions } from './combobox'
 import { formatValue, h, icon, replaceChildren } from './dom'
 
 type Send = (command: SimulationViewCommand) => void
@@ -31,25 +33,12 @@ function describe(breakpoint: BreakpointState): string {
     return breakpoint.kind === 'state' ? `enter ${breakpoint.state}` : `when ${breakpoint.expression}`
 }
 
-/** An input that sends its text on Enter and swallows the workbench shortcuts. */
-function entry(placeholder: string, control: string, submit: (text: string) => void): HTMLInputElement {
-    const input = h('input.kv-debug-entry', {
-        type: 'text',
-        placeholder,
-        spellcheck: 'false',
-        'aria-label': placeholder,
-        'data-control': control,
-    })
-    input.addEventListener('keydown', (event: KeyboardEvent) => {
-        if (event.key === 'Enter' && input.value.trim()) {
-            submit(input.value.trim())
-            input.value = ''
-        } else if (event.key === 'Escape') {
-            input.blur()
-        }
-        event.stopPropagation()
-    })
-    return input
+/** The ordering the picker shows: initial states first, then document order. */
+function stateSuggestions(state: SimulationViewState): Suggestion[] {
+    return (state.debug?.states ?? []).map((info) => ({
+        label: info.qualified,
+        detail: info.initial ? 'initial' : undefined,
+    }))
 }
 
 /**
@@ -78,49 +67,65 @@ export class BreakpointPanel {
         this.open = open
         this.el.hidden = !open
         if (open) {
-            this.el.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true })
+            this.el.querySelector<HTMLElement>('[data-control="bp-state"]')?.focus({ preventScroll: true })
         }
     }
 
-    render(debug: SimulationDebugState | undefined): void {
+    render(state: SimulationViewState): void {
+        const debug = state.phase === 'running' ? state.debug : undefined
         if (!debug) {
             this.toggle(false)
             replaceChildren(this.el)
             return
         }
         const focused = document.activeElement
-        const keep = focused instanceof HTMLInputElement && this.el.contains(focused) ? focused.value : undefined
+        const keep =
+            focused instanceof HTMLInputElement && focused.type === 'text' && this.el.contains(focused)
+                ? { control: focused.dataset.control, value: focused.value }
+                : undefined
         const rows = debug.breakpoints.map((breakpoint) => this.row(breakpoint, debug))
-        const stateEntry = entry('State name, e.g. Counting.Full', 'bp-state', (state) =>
-            this.send({ kind: 'addBreakpoint', state })
-        )
-        const conditionEntry = entry('Condition, e.g. count >= 3 && !done', 'bp-condition', (expression) =>
-            this.send({ kind: 'addBreakpoint', expression })
-        )
+        const stateControl = combobox({
+            placeholder: 'State, e.g. Counting.Full',
+            control: 'bp-state',
+            pick: true,
+            suggestions: () => stateSuggestions(state),
+            submit: (name) => this.send({ kind: 'addBreakpoint', state: name }),
+        })
+        const conditionEntry = combobox({
+            placeholder: 'Condition, e.g. count >= 3 && !done',
+            control: 'bp-condition',
+            title: 'SCCharts expression; pre(x) reads the previous tick',
+            suggestions: () => expressionSuggestions(state.variables, state.showInternal),
+            submit: (expression) => this.send({ kind: 'addBreakpoint', expression }),
+        })
         replaceChildren(
             this.el,
             h('div.kv-popover-title', {}, 'Breakpoints'),
-            rows.length
-                ? h('ul.kv-debug-list', {}, ...rows)
-                : h('p.kv-debug-empty', {}, 'Pause the simulation when a state is entered or a condition holds.'),
+            rows.length ? h('ul.kv-debug-list', {}, ...rows) : h('p.kv-debug-empty', {}, 'None yet.'),
+            h('div.kv-debug-add-title', {}, 'Pause when'),
             h(
                 'div.kv-debug-add',
                 {},
-                h('label.kv-debug-add-label', {}, icon('circle-filled'), 'Enter state'),
-                stateEntry,
-                h('label.kv-debug-add-label', {}, icon('debug-breakpoint-conditional'), 'When'),
+                h(
+                    'label.kv-debug-add-label',
+                    { title: 'Pause when this state is entered' },
+                    icon('circle-filled'),
+                    'entering'
+                ),
+                stateControl,
+                h(
+                    'label.kv-debug-add-label',
+                    { title: 'Pause after a tick in which this holds' },
+                    icon('debug-breakpoint-conditional'),
+                    'true'
+                ),
                 conditionEntry
-            ),
-            h(
-                'p.kv-debug-hint',
-                {},
-                'Names may be qualified (Root.Region.State). Conditions use SCCharts syntax; pre(x) reads the previous tick.'
             )
         )
-        if (keep !== undefined) {
-            const input = this.el.querySelector<HTMLInputElement>('input')
+        if (keep?.control) {
+            const input = this.el.querySelector<HTMLInputElement>(`input[data-control="${keep.control}"]`)
             if (input) {
-                input.value = keep
+                input.value = keep.value
                 input.focus({ preventScroll: true })
             }
         }
@@ -172,7 +177,8 @@ export class WatchPanel {
 
     constructor(private readonly send: Send) {}
 
-    render(debug: SimulationDebugState | undefined): void {
+    render(state: SimulationViewState): void {
+        const debug = state.phase === 'running' ? state.debug : undefined
         if (!debug) {
             replaceChildren(this.el)
             this.el.hidden = true
@@ -181,9 +187,12 @@ export class WatchPanel {
         this.el.hidden = false
         const focused = document.activeElement
         const keep = focused instanceof HTMLInputElement && this.el.contains(focused) ? focused.value : undefined
-        const add = entry('Watch an expression, e.g. count * 10', 'watch-add', (expression) =>
-            this.send({ kind: 'addWatch', expression })
-        )
+        const add = combobox({
+            placeholder: 'Watch an expression, e.g. count * 10',
+            control: 'watch-add',
+            suggestions: () => expressionSuggestions(state.variables, state.showInternal),
+            submit: (expression) => this.send({ kind: 'addWatch', expression }),
+        })
         replaceChildren(
             this.el,
             h('span.kv-watches-label', { title: 'Expressions evaluated after every tick' }, icon('eye'), 'Watch'),
@@ -191,8 +200,11 @@ export class WatchPanel {
             add
         )
         if (keep !== undefined) {
-            add.value = keep
-            add.focus({ preventScroll: true })
+            const input = add.querySelector('input')
+            if (input) {
+                input.value = keep
+                input.focus({ preventScroll: true })
+            }
         }
     }
 
