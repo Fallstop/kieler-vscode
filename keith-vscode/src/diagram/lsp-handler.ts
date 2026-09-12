@@ -51,7 +51,7 @@ export class LspHandler {
                 // Diagram synthesis failures leave the diagram stuck; a restart clears the server state.
                 if (/diagram synthesis|ViewContext|KNodeImpl/.test(message)) {
                     const choice = await window.showErrorMessage(
-                        'The diagram could not be rendered. Restarting the diagram usually fixes this.',
+                        'The diagram could not be rendered.',
                         RESTART_DIAGRAM,
                         'Show details'
                     )
@@ -78,9 +78,7 @@ export class LspHandler {
             // Warn once per stream of failed edits rather than on every edit.
             if (this.lastEditSuccessful) {
                 this.lastEditSuccessful = false
-                window.showWarningMessage(
-                    'Changes can not be saved because the affected document is unknown. Make sure that the document is open so your changes can be saved.'
-                )
+                window.showWarningMessage('Open the model file so diagram edits can be saved.')
             }
             return
         }

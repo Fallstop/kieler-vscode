@@ -228,7 +228,7 @@ export class WorkspaceSystems implements vscode.Disposable {
     async newSystem(): Promise<void> {
         const folders = vscode.workspace.workspaceFolders ?? []
         if (!folders.length) {
-            vscode.window.showErrorMessage('Open a folder first; compilation systems live in the workspace.')
+            vscode.window.showErrorMessage('Open a folder first.')
             return
         }
         const folder =

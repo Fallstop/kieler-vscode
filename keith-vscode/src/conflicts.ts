@@ -26,7 +26,7 @@ export async function reportConflictingExtensions(
     const names = conflicts.map((extension) => extension.name).join(', ')
     const show = 'Show conflicting extension'
     const choice = await window.showErrorMessage(
-        `SCCharts Lab is incompatible with ${names} and will not activate while it is enabled. Disable or uninstall it, then reload the window.`,
+        `SCCharts Lab cannot run beside ${names}. Disable it, then reload the window.`,
         show
     )
     if (choice === show) {

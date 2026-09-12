@@ -40,9 +40,7 @@ export async function handleWorkSpaceEdit(uri: string, text: string, position: v
     )
     const textDocument = editor?.document
     if (!textDocument) {
-        vscode.window.showErrorMessage(
-            `Server requested a text edit but the requested uri was not found among the known documents: ${uri}`
-        )
+        vscode.window.showErrorMessage(`The server edited a document that is not open: ${uri}`)
         return
     }
     // create the insert workspaceedit
@@ -53,7 +51,7 @@ export async function handleWorkSpaceEdit(uri: string, text: string, position: v
     // Apply and save the edit. Report possible failures.
     const edited = await vscode.workspace.applyEdit(workSpaceEdit)
     if (!edited) {
-        vscode.window.showErrorMessage('Workspace edit could not be applied!')
+        vscode.window.showErrorMessage('The edit could not be applied.')
         return
     }
 

@@ -494,10 +494,7 @@ export class CompilationDataProvider {
         const key = this.targetUri(uri)
         const results = key ? this.resultMap.get(key) : undefined
         if (!key || !results || !results.files.length) {
-            const choice = await vscode.window.showInformationMessage(
-                'Compile the model first to browse its compilation stages.',
-                'Compile...'
-            )
+            const choice = await vscode.window.showInformationMessage('Compile the model first.', 'Compile...')
             if (choice) await vscode.commands.executeCommand(COMPILE_COMMAND.command)
             return
         }
@@ -683,10 +680,7 @@ export class CompilationDataProvider {
         snapshot: boolean,
         uri = this.sourceModelPath
     ): Promise<void> {
-        if (!this.generatingCode && !this.settings.get('autocompile.enabled')) {
-            // TODO too much information? Test this for visual clutter
-            vscode.window.showInformationMessage(`Compiling ${uri} with ${command}`)
-        }
+        // The status bar item shows the compilation's progress; no popup is needed.
         await this.lsClient.start()
         await this.lsClient.sendNotification(COMPILE, {
             uri,
@@ -769,9 +763,7 @@ export class CompilationDataProvider {
                 const first = report?.issues.find((issue) => issue.severity === 'error')
                 vscode.window
                     .showErrorMessage(
-                        first
-                            ? `${first.stage}: ${first.message}`
-                            : 'Compilation failed. Open Problems or the compiler output for details.',
+                        first ? `${first.stage}: ${first.message}` : 'Compilation failed.',
                         'Problems',
                         'Compiler output'
                     )

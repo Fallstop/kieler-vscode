@@ -82,7 +82,7 @@ export function registerCodeGeneration(context: vscode.ExtensionContext, compile
                         })
                 } else if (count) {
                     vscode.window.showInformationMessage(
-                        `Opened ${count} generated files. Use Save As or Save All Generated Files to keep them.`
+                        `Opened ${count} generated files. Save All Generated Files keeps them.`
                     )
                 }
             } catch (error) {

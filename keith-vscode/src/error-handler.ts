@@ -40,7 +40,7 @@ export class KeithErrorHandler implements ErrorHandler {
         console.error('KIELER language server connection error', error)
         const result = await this.defaultHandler.error(error, message, count)
         if (result.action === ErrorAction.Shutdown) {
-            this.offerRestart('The connection to the KIELER language server failed repeatedly and was shut down.')
+            this.offerRestart('The KIELER language server connection failed.')
         }
         return result
     }
@@ -48,7 +48,7 @@ export class KeithErrorHandler implements ErrorHandler {
     async closed(): Promise<CloseHandlerResult> {
         const result = await this.defaultHandler.closed()
         if (result.action === CloseAction.DoNotRestart) {
-            this.offerRestart('The KIELER language server stopped and was not restarted automatically.')
+            this.offerRestart('The KIELER language server stopped.')
         } else {
             window.setStatusBarMessage('$(sync~spin) KIELER language server restarting...', 5000)
         }

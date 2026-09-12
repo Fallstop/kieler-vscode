@@ -154,7 +154,7 @@ export class RuntimeManager implements vscode.Disposable {
         const settings = 'Set javaHome'
         const log = 'Show log'
         const choice = await vscode.window.showErrorMessage(
-            `SCCharts Lab needs Java ${REQUIRED_JAVA} or newer and found none.${found} Install a JDK or point the keith-vscode.javaHome setting at one, then reload the window. Platform builds of the extension from the Marketplace include their own runtime.`,
+            `SCCharts Lab needs Java ${REQUIRED_JAVA} or newer and found none.${found}`,
             download,
             settings,
             log
@@ -301,10 +301,7 @@ export class RuntimeManager implements vscode.Disposable {
         StartupCache.clear(root)
         this.output.appendLine(`Startup cache cleared (${root})`)
         const restart = 'Restart server'
-        const choice = await vscode.window.showInformationMessage(
-            'The startup cache was cleared. It is rebuilt over the next two language server starts.',
-            restart
-        )
+        const choice = await vscode.window.showInformationMessage('Startup cache cleared.', restart)
         if (choice === restart && this.restartServer) await this.restartServer()
     }
 
@@ -323,9 +320,9 @@ export class RuntimeManager implements vscode.Disposable {
         const download = 'Download a JDK'
         const settings = 'Set javaHome'
         const choice = await vscode.window.showErrorMessage(
-            `Java simulation compiles the generated code with javac, which the ${
+            `Java simulation needs javac, which the ${
                 java?.source === 'bundled' ? 'bundled runtime' : 'selected Java runtime'
-            } does not include. Install a JDK ${REQUIRED_JAVA} or newer and point keith-vscode.javaHome at it, or simulate with a C system instead.`,
+            } does not include.`,
             download,
             settings
         )
@@ -367,15 +364,8 @@ export class RuntimeManager implements vscode.Disposable {
         const size = (installer.manifest.size / 1e6).toFixed(0)
         const download = `Download (${size} MB)`
         const own = 'Use my own compiler'
-        const declined = this.context.globalState.get<boolean>(DECLINED_DOWNLOAD_KEY)
         const choice = await vscode.window.showInformationMessage(
-            `C simulation needs a C compiler and none was found. SCCharts Lab can download w64devkit ${
-                installer.manifest.version
-            }, a portable GCC, into its own storage folder.${
-                declined
-                    ? ' You declined this earlier; the offer stays available as the "Download C toolchain" command.'
-                    : ''
-            }`,
+            `C simulation needs a C compiler. Download w64devkit ${installer.manifest.version} (portable GCC)?`,
             { modal: false },
             download,
             own
