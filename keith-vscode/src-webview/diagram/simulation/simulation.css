@@ -313,7 +313,8 @@ body .sidebar {
 /* Narrow panels: the slider goes first, then the tick label and the model name, instead of wrapping. */
 @media (max-width: 520px) {
     .kv-delay,
-    .kv-tick-label {
+    .kv-tick-label,
+    .kv-toolbar-right .kv-btn-label {
         display: none;
     }
 }
@@ -362,7 +363,7 @@ body .sidebar {
     outline: none;
 }
 
-/* The summary line with the trace's own controls at its right end. */
+/* The watch line with the trace's own controls at its right end. */
 .kv-drawer-header {
     display: flex;
     flex: 0 0 auto;
@@ -370,9 +371,20 @@ body .sidebar {
     border-bottom: 1px solid var(--kv-border);
 }
 
-.kv-summary-host {
+.kv-drawer-header .kv-watches {
     flex: 1 1 auto;
     min-width: 0;
+    border-bottom: 0;
+}
+
+/* What the last tick did, directly above the table it summarises. */
+.kv-summary-host {
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--kv-border);
+}
+
+.kv-summary-host:empty {
+    display: none;
 }
 
 .kv-drawer-tools-host {

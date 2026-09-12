@@ -89,3 +89,32 @@ test('failure panel exposes source, explanation and details, disables stale sour
     assert.equal(view.el.hidden, true)
     dom.window.close()
 })
+
+test('the preview panel hides and shows warnings with the editor, and says how many it hides', () => {
+    const dom = new JSDOM('<div class="kv-root"><header class="kv-toolbar"></header></div>')
+    for (const name of ['document', 'window', 'HTMLElement', 'Event']) global[name] = dom.window[name]
+    const ui = createLoader()
+    const { DiagnosticView } = ui('src-webview/diagram/diagnostics/view.ts')
+    const sent = []
+    const view = new DiagnosticView({ onNotification() {}, sendNotification: (_, __, command) => sent.push(command) })
+    const warning = { id: '2:0', stage: 'Dependency', message: 'Potential instantaneous loop.', severity: 'warning', code: 'instantaneous-loop', locations: [], cycle: [] }
+    const report = { id: 2, uri, version: 1, status: 'succeeded', issues: [warning], rawCount: 3 }
+    const buttons = () => [...view.el.querySelectorAll('.kd-heading button')].map((button) => button.textContent)
+    view.render(report, true)
+    assert.match(view.el.querySelector('[role="status"]').textContent, /Compiled with 1 warning/)
+    assert.ok(view.el.querySelector('.kd-warnings'), 'the warning list is there')
+    assert.deepEqual(buttons(), ['Hide warnings', 'Problems'])
+    view.el.querySelector('.kd-heading button').click()
+    assert.deepEqual(sent.pop(), { kind: 'showWarnings', enabled: false })
+    view.render(report, false)
+    assert.equal(view.el.hidden, false, 'the panel stays, so the warnings can be brought back from here')
+    assert.match(view.el.querySelector('[role="status"]').textContent, /Compiled, 1 warning hidden/)
+    assert.equal(view.el.querySelector('.kd-warnings'), null, 'no warning list while hidden')
+    assert.deepEqual(buttons(), ['Show warnings', 'Problems'])
+    view.el.querySelector('.kd-heading button').click()
+    assert.deepEqual(sent.pop(), { kind: 'showWarnings', enabled: true })
+    // With no warnings there is nothing to toggle.
+    view.render({ ...report, issues: [{ ...warning, severity: 'error', stage: 'Scheduler' }] }, false)
+    assert.deepEqual(buttons(), ['Problems'])
+    dom.window.close()
+})

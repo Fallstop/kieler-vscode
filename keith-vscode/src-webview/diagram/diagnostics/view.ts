@@ -25,7 +25,9 @@ export class DiagnosticView {
     constructor(private readonly messenger: Messenger) {
         const toolbar = document.querySelector('.kv-toolbar')
         toolbar?.after(this.el)
-        messenger.onNotification(diagnosticState, ({ report }) => this.render(report))
+        messenger.onNotification(diagnosticState, ({ report, showWarnings }) =>
+            this.render(report, showWarnings ?? true)
+        )
     }
 
     connect(): void {
@@ -36,8 +38,8 @@ export class DiagnosticView {
         this.messenger.sendNotification(diagnosticCommand, HOST_EXTENSION, command)
     }
 
-    render(report?: BuildReport): void {
-        const key = JSON.stringify(report)
+    render(report?: BuildReport, showWarnings = true): void {
+        const key = JSON.stringify([report, showWarnings])
         if (key === this.key) return
         this.key = key
         this.showHighlightStatus('')
@@ -59,16 +61,30 @@ export class DiagnosticView {
                   ? `${errors.length === 1 ? 'Compilation failed' : `${errors.length} compilation issues`} · ${
                         errors[0].stage
                     }`
-                  : `Compiled with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}`
+                  : showWarnings
+                    ? `Compiled with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}`
+                    : `Compiled, ${warnings.length} warning${warnings.length === 1 ? '' : 's'} hidden`
         this.el.classList.toggle('kd-stale', stale)
+        // The warnings are hidden and shown from here as well as from the editor; it is one setting.
+        const warningToggle =
+            warnings.length > 0 &&
+            this.button(showWarnings ? 'Hide warnings' : 'Show warnings', () =>
+                this.send({ kind: 'showWarnings', enabled: !showWarnings })
+            )
         const title = h(
             'div.kd-heading',
             {},
             h('strong', { role: errors.length && !stale ? 'alert' : 'status' }, heading),
-            this.button('Problems', () => this.send({ kind: 'problems', build: report.id }))
+            h(
+                'div.kd-actions',
+                {},
+                warningToggle,
+                this.button('Problems', () => this.send({ kind: 'problems', build: report.id }))
+            )
         )
         const warningList =
             warnings.length > 0 &&
+            showWarnings &&
             h(
                 'details.kd-warnings',
                 {},

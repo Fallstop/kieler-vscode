@@ -341,3 +341,31 @@ test('earlier tick headers rewind on click and the paused tick is marked', (t) =
     timeline.render(viewState({ playing: true }))
     assert.equal(timeline.el.querySelectorAll('th.kv-rewindable').length, 0, 'no rewinding while ticks run')
 })
+
+test('picking a state from the completion list keeps the breakpoint popover open, and ticks leave the list alone', (t) => {
+    const load = webview(t)
+    const { BreakpointPanel } = load('src-webview/diagram/simulation/debug.ts')
+    const sent = []
+    const panel = new BreakpointPanel((command) => sent.push(command))
+    document.body.append(panel.el)
+    const states = [{ name: 'Root', qualified: 'Root.Tick', initial: true }, { name: 'Full', qualified: 'Root.Full' }]
+    panel.render(viewState({ debug: debug({ states }) }))
+    panel.toggle(true)
+    const picker = panel.el.querySelector('input[data-control="bp-state"]')
+    picker.focus()
+    picker.dispatchEvent(new window.Event('input', { bubbles: true }))
+    const items = panel.el.querySelectorAll('.kv-combo-item')
+    assert.equal(items.length, 2, 'the list is open')
+    // A tick that changes nothing the popover shows must not rebuild it under the open list.
+    panel.render(viewState({ tick: 9, debug: debug({ states }) }))
+    assert.equal(panel.el.querySelector('input[data-control="bp-state"]'), picker, 'the field is the same element')
+    assert.equal(panel.el.querySelectorAll('.kv-combo-item').length, 2, 'the list is still open')
+    // Choosing an entry removes it from the list before the document sees the mousedown.
+    items[1].querySelector('.kv-combo-label').dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }))
+    assert.deepEqual(sent.at(-1), { kind: 'addBreakpoint', state: 'Root.Full' })
+    assert.equal(panel.isOpen(), true, 'the popover stays open')
+    assert.equal(panel.el.hidden, false)
+    // A click anywhere else still closes it.
+    document.body.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true }))
+    assert.equal(panel.isOpen(), false)
+})

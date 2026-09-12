@@ -52,4 +52,8 @@ export type Settings = {
      * Milliseconds the server waits after the last edit before analysing.
      */
     'liveDiagnostics.debounceMs': number
+    /**
+     * Show the compiler's warnings as squiggles; errors always show.
+     */
+    'diagnostics.showWarnings': boolean
 }

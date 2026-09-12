@@ -15,7 +15,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-/* global document, HTMLElement, HTMLInputElement, MouseEvent */
+/* global document, HTMLElement, HTMLInputElement, MouseEvent, Node */
 
 import {
     BreakpointState,
@@ -50,12 +50,18 @@ export class BreakpointPanel {
 
     private open = false
 
+    private renderKey = ''
+
     constructor(private readonly send: Send) {
         document.addEventListener('mousedown', (event) => {
-            const target = (event as MouseEvent).target as HTMLElement | null
-            if (this.open && target && !this.el.contains(target) && !target.closest('[data-control="Breakpoints"]')) {
-                this.toggle(false)
-            }
+            if (!this.open) return
+            // The path as it was when the mouse went down: a suggestion removes itself from the
+            // list in its own mousedown handler, so by now the target may be detached.
+            const path = (event as MouseEvent).composedPath()
+            const inside = path.some(
+                (node) => node === this.el || (node instanceof HTMLElement && node.dataset.control === 'Breakpoints')
+            )
+            if (!inside) this.toggle(false)
         })
     }
 
@@ -76,8 +82,20 @@ export class BreakpointPanel {
         if (!debug) {
             this.toggle(false)
             replaceChildren(this.el)
+            this.renderKey = ''
             return
         }
+        // Ticks arrive every few hundred milliseconds while running; the list is only rebuilt
+        // when something it shows changed, so an open completion list survives them.
+        const key = JSON.stringify([
+            debug.breakpoints,
+            debug.paused,
+            debug.states,
+            state.showInternal,
+            state.variables.map((variable) => [variable.label, variable.role, variable.internal]),
+        ])
+        if (key === this.renderKey) return
+        this.renderKey = key
         const focused = document.activeElement
         const keep =
             focused instanceof HTMLInputElement && focused.type === 'text' && this.el.contains(focused)
@@ -175,57 +193,86 @@ export class BreakpointPanel {
 export class WatchPanel {
     readonly el = h('div.kv-watches')
 
+    private state: SimulationViewState | undefined
+
+    private readonly label = h(
+        'span.kv-watches-label',
+        { title: 'Expressions evaluated after every tick' },
+        icon('eye'),
+        'Watch'
+    )
+
+    /** Created once: rebuilding it on every tick would blur the field mid-typing. */
+    private readonly add = combobox({
+        placeholder: 'Watch an expression, e.g. count * 10',
+        control: 'watch-add',
+        suggestions: () => (this.state ? expressionSuggestions(this.state.variables, this.state.showInternal) : []),
+        submit: (expression) => this.send({ kind: 'addWatch', expression }),
+    })
+
+    private readonly chips = new Map<string, HTMLElement>()
+
     constructor(private readonly send: Send) {}
 
     render(state: SimulationViewState): void {
+        this.state = state
         const debug = state.phase === 'running' ? state.debug : undefined
         if (!debug) {
+            this.chips.clear()
             replaceChildren(this.el)
             this.el.hidden = true
             return
         }
         this.el.hidden = false
-        const focused = document.activeElement
-        const keep = focused instanceof HTMLInputElement && this.el.contains(focused) ? focused.value : undefined
-        const add = combobox({
-            placeholder: 'Watch an expression, e.g. count * 10',
-            control: 'watch-add',
-            suggestions: () => expressionSuggestions(state.variables, state.showInternal),
-            submit: (expression) => this.send({ kind: 'addWatch', expression }),
-        })
-        replaceChildren(
-            this.el,
-            h('span.kv-watches-label', { title: 'Expressions evaluated after every tick' }, icon('eye'), 'Watch'),
-            ...debug.watches.map((watch) => this.chip(watch)),
-            add
-        )
-        if (keep !== undefined) {
-            const input = add.querySelector('input')
-            if (input) {
-                input.value = keep
-                input.focus({ preventScroll: true })
-            }
+        if (!this.el.contains(this.add)) {
+            replaceChildren(this.el, this.label, this.add)
         }
+        const shown = new Set(debug.watches.map((watch) => watch.id))
+        this.chips.forEach((chip, id) => {
+            if (!shown.has(id)) {
+                chip.remove()
+                this.chips.delete(id)
+            }
+        })
+        // Chips are keyed by watch id and updated in place; only new ones are inserted.
+        let cursor: Node | null = this.label.nextSibling
+        debug.watches.forEach((watch) => {
+            const chip = this.chip(watch)
+            if (chip === cursor) {
+                cursor = chip.nextSibling
+            } else {
+                this.el.insertBefore(chip, cursor)
+            }
+        })
     }
 
     private chip(watch: WatchState): HTMLElement {
-        return h(
-            `span.kv-watch${watch.error ? '.kv-watch-error' : ''}`,
-            { title: watch.error ?? `${watch.expression} = ${formatValue(watch.value)}` },
-            h('span.kv-watch-expr', {}, watch.expression),
-            h('span.kv-watch-eq', {}, '='),
-            h('span.kv-watch-value', {}, watch.error ? 'error' : formatValue(watch.value)),
-            h(
-                'button.kv-watch-remove',
-                {
-                    type: 'button',
-                    title: 'Remove watch',
-                    'aria-label': `Remove watch ${watch.expression}`,
-                    onclick: () => this.send({ kind: 'removeWatch', id: watch.id }),
-                },
-                icon('close')
+        let chip = this.chips.get(watch.id)
+        if (!chip) {
+            chip = h(
+                'span.kv-watch',
+                {},
+                h('span.kv-watch-expr', {}, watch.expression),
+                h('span.kv-watch-eq', {}, '='),
+                h('span.kv-watch-value'),
+                h(
+                    'button.kv-watch-remove',
+                    {
+                        type: 'button',
+                        title: 'Remove watch',
+                        'aria-label': `Remove watch ${watch.expression}`,
+                        onclick: () => this.send({ kind: 'removeWatch', id: watch.id }),
+                    },
+                    icon('close')
+                )
             )
-        )
+            this.chips.set(watch.id, chip)
+        }
+        chip.classList.toggle('kv-watch-error', !!watch.error)
+        chip.title = watch.error ?? `${watch.expression} = ${formatValue(watch.value)}`
+        const value = chip.querySelector('.kv-watch-value')
+        if (value) value.textContent = watch.error ? 'error' : formatValue(watch.value)
+        return chip
     }
 }
 

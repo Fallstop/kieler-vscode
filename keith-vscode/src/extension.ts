@@ -29,6 +29,7 @@ import { DiagnosticBridge } from './kico/diagnostic-bridge'
 import { registerCodeGeneration } from './kico/code-generation'
 import { WorkspaceSystems } from './kico/workspace-systems'
 import { LiveDiagnostics, LiveDiagnosticsParam, liveDiagnosticsMethod } from './kico/live-diagnostics'
+import { WarningToggle } from './kico/warning-toggle'
 import { handlePerformAction, PerformActionAction, performActionKind } from './perform-action-handler'
 import { RuntimeManager } from './runtime/runtime-manager'
 import { SettingsService } from './settings'
@@ -161,6 +162,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         'showInternalVariables.enabled',
         'liveDiagnostics.enabled',
         'liveDiagnostics.debounceMs',
+        'diagnostics.showWarnings',
     ])
     context.subscriptions.push(settingsService)
 
@@ -176,18 +178,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     )
     // The server analyses open SCCharts after every edit; the findings show as squiggles without a compile.
     const liveDiagnostics = new LiveDiagnostics(lsClient, compilationDataProvider.diagnostics)
+    const showWarnings = () => settingsService.get('diagnostics.showWarnings') ?? true
+    compilationDataProvider.diagnostics.setShowWarnings(showWarnings())
     const liveConfiguration = () => ({
         enabled: settingsService.get('liveDiagnostics.enabled') ?? true,
         debounceMs: settingsService.get('liveDiagnostics.debounceMs') ?? 400,
     })
     context.subscriptions.push(
         liveDiagnostics,
+        new WarningToggle(settingsService, compilationDataProvider.diagnostics, liveDiagnostics),
         lsClient.onNotification(liveDiagnosticsMethod, (params: LiveDiagnosticsParam) =>
             liveDiagnostics.accept(params)
         ),
         vscode.workspace.onDidChangeConfiguration((event) => {
             if (event.affectsConfiguration(`${settingsKey}.liveDiagnostics`))
                 liveDiagnostics.configure(liveConfiguration())
+            if (event.affectsConfiguration(`${settingsKey}.diagnostics.showWarnings`))
+                compilationDataProvider.diagnostics.setShowWarnings(showWarnings())
         })
     )
     // Clicking the code view's text asks for an Eclipse editor; the generated code opens as tabs instead.

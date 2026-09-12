@@ -40,6 +40,9 @@ export class CompilerDiagnostics implements vscode.Disposable {
 
     private nextId = 0
 
+    /** Whether warning-severity issues become squiggles; errors always do. Reports keep every issue. */
+    showWarnings = true
+
     private readonly subscriptions: vscode.Disposable[]
 
     constructor() {
@@ -167,6 +170,17 @@ export class CompilerDiagnostics implements vscode.Disposable {
         return report
     }
 
+    /** Shows or hides warning squiggles; the finished reports are published again with the new filter. */
+    setShowWarnings(enabled: boolean): void {
+        if (this.showWarnings === enabled) return
+        this.showWarnings = enabled
+        this.reports.forEach((report) => {
+            if (report.status === 'succeeded' || report.status === 'failed') this.publish(report)
+        })
+        // The live path listens here and re-renders its own squiggles with the same filter.
+        this.changed.fire()
+    }
+
     reset(): void {
         this.collection.clear()
         this.reports.clear()
@@ -212,7 +226,8 @@ export class CompilerDiagnostics implements vscode.Disposable {
         const source = this.sources.get(report.id) ?? ''
         const document = vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === report.uri)
         if (!document || document.version !== report.version) return
-        const byFile = renderIssues(report.issues, report.uri, document, source, (issue) => `KIELER · ${issue.stage}`)
+        const issues = report.issues.filter((issue) => this.showWarnings || issue.severity === 'error')
+        const byFile = renderIssues(issues, report.uri, document, source, (issue) => `KIELER · ${issue.stage}`)
         this.clearPublished(report.uri)
         byFile.forEach((diagnostics, uri) => this.collection.set(vscode.Uri.parse(uri), diagnostics))
         this.published.set(report.uri, new Set(byFile.keys()))

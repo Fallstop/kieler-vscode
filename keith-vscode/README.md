@@ -20,9 +20,9 @@ validation while typing, hover, go to definition, outline, diagrams, compilation
 Diagram visualization and simulation are included in this extension. Open a model's
 preview to simulate, step through ticks, edit inputs, and inspect its variable trace.
 Everything lives in the editor area: there is no sidebar. The preview's toolbar carries
-**Simulate**, then the transport controls; the editor title of an SCChart offers **Stages**
-(browse the compiler's intermediate models) and **Code** (generate C or Java). While a
-compiler stage is shown, **Model** brings the diagram back to the SCChart.
+**Simulate**, then the transport controls, and **Code** (generate C or Java) at its right end;
+the editor title of an SCChart offers **Stages** (browse the compiler's intermediate models).
+While a compiler stage is shown, **Model** brings the diagram back to the SCChart.
 
 Editing a model while its simulation runs marks the run as out of date: **Restart** becomes
 **Rebuild**, which compiles the model again with the same simulation system and starts over
@@ -38,10 +38,11 @@ server validates each one and shows why one was rejected next to it. `C` runs ti
 the model allows until a breakpoint fires; a running simulation (**Run**) stops on a breakpoint
 as well. The tick the simulation paused at is marked in the trace.
 
-**Watch** expressions, above the trace table, are evaluated after every tick in the same
-syntax and show their value or the reason they cannot be evaluated. The trace's own controls
-sit at the right end of its summary line: **Generated** shows the compiler's own symbols, and
-**Save** and **Load** write or replay a `.ktrace` file. Both are remembered per
+**Watch** expressions, on the trace drawer's top line, are evaluated after every tick in the
+same syntax and show their value or the reason they cannot be evaluated. The trace's own
+controls sit at the right end of that line: **Generated** shows the compiler's own symbols, and
+**Save** and **Load** write or replay a `.ktrace` file. What the last tick did (inputs present,
+outputs emitted, variables changed) is summarised directly above the table. Both are remembered per
 model, so a restarted or rebuilt simulation keeps them. The Command Palette has **Add
 simulation breakpoint...** (a pick list of the model's states, or a condition) and **Add
 simulation watch expression...**.
@@ -71,7 +72,13 @@ instantaneous loops, clocks shared between concurrent regions, redeclared inheri
 and regions, and every other located compiler finding. No code is generated and nothing is
 written to disk. A compile you start yourself takes over the document until you edit it again.
 `keith-vscode.liveDiagnostics.enabled` turns it off; `keith-vscode.liveDiagnostics.debounceMs`
-changes the wait. On a 300-line model the analysis takes about a second cold and a third of
+changes the wait. The compiler's warnings can be hidden: the preview's "Compiled with N warnings"
+panel has a **Hide warnings** button, the lightbulb on any **KIELER** warning offers **Hide
+KIELER warnings**, and **Hide Compiler Warnings** is in the Command Palette and an SCChart's
+editor menus. While they are hidden the panel reads "Compiled, N warnings hidden" with a **Show
+warnings** button, and a status bar item counts them for the active model and shows them again
+on click. Errors always show. The setting behind all of this is
+`keith-vscode.diagnostics.showWarnings`. On a 300-line model the analysis takes about a second cold and a third of
 that warm.
 
 ### Editor features

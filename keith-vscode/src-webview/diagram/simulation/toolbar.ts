@@ -45,7 +45,8 @@ export interface ToolbarHost {
 /**
  * The transport controls along the top of the preview. One row that never wraps: on narrow panels
  * the button labels and then the slider drop away (see the media queries in simulation.css).
- * Everything about the trace itself (saving, loading, generated symbols) lives in the drawer.
+ * Everything about the trace itself (saving, loading, generated symbols) lives in the drawer;
+ * Code, at the right end, is there for both a running and an idle model.
  */
 export class Toolbar {
     readonly el = h('header.kv-toolbar')
@@ -65,6 +66,7 @@ export class Toolbar {
             state.showInternal,
             state.stale,
             state.stage,
+            state.canGenerate,
             this.host.drawerOpen(),
             this.host.breakpointsOpen?.() ?? false,
             state.debug && [
@@ -92,6 +94,16 @@ export class Toolbar {
         const right = h(
             'div.kv-toolbar-right',
             {},
+            state.canGenerate &&
+                this.button(
+                    'code',
+                    'Code',
+                    'Generate C or Java from this model and open it in the editor',
+                    () => this.host.send({ kind: 'generateCode' }),
+                    '',
+                    false,
+                    true
+                ),
             state.phase === 'running' &&
                 state.debug &&
                 this.toggle(

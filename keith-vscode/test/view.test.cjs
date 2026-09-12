@@ -211,10 +211,13 @@ test('a shown compiler stage replaces the transport controls with a way back to 
     document.body.append(toolbar.el)
     toolbar.render(state({ phase: 'idle', canGenerate: true }))
     assert.ok(toolbar.el.querySelector('[aria-label="Simulate…"]'))
-    // Stages and Code live in the editor title, not on the bar.
+    // Stages lives in the editor title; Code sits on the bar whenever the preview shows an .sctx file.
     assert.equal(toolbar.el.querySelector('[aria-label="Stages"]'), null)
-    assert.equal(toolbar.el.querySelector('[aria-label="Code"]'), null)
+    toolbar.el.querySelector('[aria-label="Code"]').click()
+    assert.deepEqual(sent, ['generateCode'])
+    sent.length = 0
     toolbar.render(state({ phase: 'idle', canGenerate: false, stage: { name: 'C Code', position: 39, count: 46 } }))
+    assert.equal(toolbar.el.querySelector('[aria-label="Code"]'), null)
     assert.equal(toolbar.el.querySelector('[aria-label="Simulate…"]'), null)
     assert.equal(toolbar.el.querySelector('.kv-stage-value').textContent, 'C Code')
     assert.equal(toolbar.el.querySelector('.kv-stage-label').textContent, 'Stage 39/46')
@@ -246,4 +249,81 @@ test('an edited model turns Restart into Rebuild until the simulation is built a
     assert.equal(toolbar.el.querySelector('[aria-label="Rebuild"]'), null)
     toolbar.el.querySelector('[aria-label="Restart"]').click()
     assert.deepEqual(sent, ['rebuild', 'restart'])
+})
+
+test('a tick that lands in the middle of a click leaves the input controls and drawer tools in place', () => {
+    const { SimulationView } = load('src-webview/diagram/simulation/view.ts')
+    const sent = []
+    let update
+    new SimulationView({ onNotification: (_, handler) => { update = handler }, sendNotification: (_, __, command) => sent.push(command) })
+    const flag = { ...input(false), id: 'flag', label: 'Flag' }
+    const count = { ...input(2), id: 'count', label: 'Count', history: [2] }
+    update(state({ tick: 1, playing: true, variables: [flag, count] }))
+    const toggle = document.querySelector('[data-control="switch:flag"]')
+    const editor = document.querySelector('input.kv-input[data-id="count"]')
+    const generated = document.querySelector('[aria-label="Generated"]')
+    const knob = toggle.querySelector('.kv-switch-knob')
+    // mousedown here, then the next tick arrives, then mouseup: the same elements must still be there.
+    knob.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true }))
+    update(state({ tick: 2, playing: true, variables: [{ ...flag, history: [false, false] }, { ...count, history: [2, 2] }] }))
+    assert.equal(document.querySelector('[data-control="switch:flag"]'), toggle, 'the switch is the same element')
+    assert.equal(document.querySelector('input.kv-input[data-id="count"]'), editor, 'the input is the same element')
+    assert.equal(document.querySelector('[aria-label="Generated"]'), generated, 'the drawer tools are the same elements')
+    assert.equal(document.querySelectorAll('.kv-col-tick').length, 2)
+    knob.dispatchEvent(new window.MouseEvent('mouseup', { bubbles: true }))
+    toggle.click()
+    assert.deepEqual(sent.at(-1), { kind: 'setInput', id: 'flag', value: true, modelUri })
+    assert.equal(toggle.getAttribute('aria-checked'), 'true', 'the switch shows the sent value at once')
+    toggle.click()
+    assert.deepEqual(sent.at(-1), { kind: 'setInput', id: 'flag', value: false, modelUri }, 'a second click toggles from the sent value')
+    // The server confirms the queued value; an input being edited keeps its text.
+    editor.focus()
+    editor.value = '4'
+    update(state({ tick: 3, playing: true, variables: [{ ...flag, next: false, history: [false, false, false] }, { ...count, next: 7, pending: true, history: [2, 2, 2] }] }))
+    assert.equal(editor.value, '4')
+    assert.ok(editor.closest('td').classList.contains('kv-pending'))
+    editor.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    assert.deepEqual(sent.at(-1), { kind: 'setInput', id: 'count', value: 4, modelUri })
+    update(state({ tick: 4, playing: true, variables: [{ ...flag, history: [false, false, false, false] }, { ...count, next: 4, history: [2, 2, 2, 2] }] }))
+    assert.equal(editor.value, '4', 'an unfocused input shows the queued value')
+    assert.equal(document.querySelectorAll('.kv-col-tick').length, 4)
+})
+
+test('the watch line shares the top of the drawer with the tools; the tick summary sits above the table', () => {
+    const { SimulationView } = load('src-webview/diagram/simulation/view.ts')
+    let update
+    new SimulationView({ onNotification: (_, handler) => { update = handler }, sendNotification() {} })
+    update(state({ tick: 1, variables: [{ ...input(1), history: [1] }], debug: { breakpoints: [], states: [], watches: [], canStepBack: false, runningToBreakpoint: false } }))
+    const header = document.querySelector('.kv-drawer-header')
+    assert.ok(header.querySelector('.kv-watches'), 'watches are in the header')
+    assert.ok(header.querySelector('.kv-drawer-tools'), 'tools are in the header')
+    const drawerChildren = [...document.querySelector('.kv-drawer').children]
+    const headerIndex = drawerChildren.indexOf(header)
+    const summaryIndex = drawerChildren.indexOf(document.querySelector('.kv-summary-host'))
+    const tableIndex = drawerChildren.indexOf(document.querySelector('.kv-timeline'))
+    assert.ok(headerIndex < summaryIndex && summaryIndex < tableIndex, 'header, then summary, then the table')
+    assert.match(document.querySelector('.kv-summary').textContent, /Tick 1/)
+})
+
+test('a clicked switch holds its value against a state from before the click, until the server reports it', () => {
+    const { Timeline } = load('src-webview/diagram/simulation/timeline.ts')
+    const sent = []
+    const timeline = new Timeline((command) => sent.push(command))
+    document.body.append(timeline.el)
+    const flag = (next, history) => ({ ...input(next), id: 'flag', label: 'Flag', history })
+    timeline.render(state({ tick: 1, playing: true, variables: [flag(false, [false])] }))
+    const toggle = timeline.el.querySelector('[data-control="switch:flag"]')
+    toggle.click()
+    assert.deepEqual(sent, [{ kind: 'setInput', id: 'flag', value: true }])
+    // A fast simulation pushes the state of a tick computed before the click was handled.
+    timeline.render(state({ tick: 2, playing: true, variables: [flag(false, [false, false])] }))
+    assert.equal(toggle.getAttribute('aria-checked'), 'true', 'the stale state does not flip it back')
+    assert.equal(toggle.querySelector('.kv-switch-label').textContent, 'true')
+    // The server reports the queued value; from here on the server's value is shown.
+    timeline.render(state({ tick: 3, playing: true, variables: [{ ...flag(true, [false, false, true]), pending: true }] }))
+    assert.equal(toggle.getAttribute('aria-checked'), 'true')
+    timeline.render(state({ tick: 4, playing: true, variables: [flag(false, [false, false, true, true])] }))
+    assert.equal(toggle.getAttribute('aria-checked'), 'false', 'a later server value is shown as sent')
+    toggle.click()
+    assert.deepEqual(sent.at(-1), { kind: 'setInput', id: 'flag', value: true }, 'the click toggles from the shown value')
 })

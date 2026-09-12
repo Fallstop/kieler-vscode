@@ -124,3 +124,24 @@ test('loop warnings explained by a live cycle error are folded into it', () => {
     live.accept({ uri, version: 1, issues: [loop, issue()], durationMs: 300 })
     assert.deepEqual(collections['kieler-live'].get(uri).map(d => d.code), ['scheduling-cycle'])
 })
+
+test('warning squiggles can be switched off for compile and live results alike; errors stay', async () => {
+    const { live, compiler, document, issue, collections } = setup()
+    const doc = document('file:///demo.sctx')
+    const uri = doc.uri.toString()
+    const warning = issue({ code: 'unused-variable', message: 'x is never read.', severity: 'warning' })
+    live.accept({ uri, version: 1, issues: [issue(), warning], durationMs: 300 })
+    assert.equal(collections['kieler-live'].get(uri).length, 2)
+    compiler.setShowWarnings(false)
+    assert.deepEqual(collections['kieler-live'].get(uri).map((d) => d.severity), [0], 'only the error remains live')
+    // A compile report published while warnings are off omits them too, and gets them back when they return.
+    await compiler.begin(uri)
+    compiler.finish(uri, [[{ name: 'Compiler', index: 0, errors: [], diagnostics: [
+        { code: 'c-compiler', message: 'Compiler failed', severity: 'error', locations: [], cycle: [] },
+        { code: 'unused-variable', message: 'x is never read.', severity: 'warning', locations: [], cycle: [] },
+    ] }]], false)
+    assert.deepEqual(collections['kieler-compiler'].get(uri).map((d) => d.severity), [0])
+    assert.equal(compiler.get(uri).issues.length, 2, 'the report itself keeps the warning')
+    compiler.setShowWarnings(true)
+    assert.deepEqual(collections['kieler-compiler'].get(uri).map((d) => d.severity).sort(), [0, 1])
+})

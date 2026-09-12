@@ -45,13 +45,14 @@ export interface BuildReport {
     rawCount: number
 }
 
-export const diagnosticState: NotificationType<{ modelUri?: string; report?: BuildReport }> = {
+export const diagnosticState: NotificationType<{ modelUri?: string; report?: BuildReport; showWarnings?: boolean }> = {
     method: 'keith/diagnostics/state',
 }
 
 export type DiagnosticCommand =
     | { kind: 'request' }
     | { kind: 'problems'; build: number }
+    | { kind: 'showWarnings'; enabled: boolean }
     | { kind: 'source' | 'stage' | 'details' | 'highlight'; build: number; issue: string; location?: number }
 
 export const diagnosticCommand: NotificationType<DiagnosticCommand> = { method: 'keith/diagnostics/command' }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import { DiagramController } from '../diagram/diagram-controller'
 import { CompilerDiagnostics } from './compiler-diagnostics'
 import { diagnosticCommand, DiagnosticCommand, diagnosticHighlight, diagnosticState } from './diagnostic-protocol'
+import { HIDE_WARNINGS, SHOW_WARNINGS } from './warning-toggle'
 
 /** One build report drives editor diagnostics and the preview, including after reopening the panel. */
 export class DiagnosticBridge implements vscode.Disposable {
@@ -51,6 +52,7 @@ export class DiagnosticBridge implements vscode.Disposable {
         this.diagrams.sendToDiagram(diagnosticState, {
             modelUri,
             report: report && { ...report, issues: report.issues.map((issue) => ({ ...issue, details: undefined })) },
+            showWarnings: this.diagnostics.showWarnings ?? true,
         })
     }
 
@@ -58,6 +60,11 @@ export class DiagnosticBridge implements vscode.Disposable {
         if (!command || typeof command.kind !== 'string') return
         if (command.kind === 'request') {
             this.push()
+            return
+        }
+        if (command.kind === 'showWarnings') {
+            // The same setting the editor's quick fix and the status bar change; the compiler's change event pushes it back.
+            await vscode.commands.executeCommand(command.enabled ? SHOW_WARNINGS : HIDE_WARNINGS)
             return
         }
         const uri = this.diagrams.currentUri?.toString()

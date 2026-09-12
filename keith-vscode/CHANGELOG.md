@@ -37,6 +37,32 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `state`, `initial state`, `region`, `if ... go to` and `entry do` also come as snippets
   with tab stops. A half-typed keyword inside a state body and a variable inside a trigger
   used to return nothing at all; bare operators such as `%`, `>>>` and `Pr=` are gone.
+- **Input edits register while the simulation runs.** The trace table was rebuilt from scratch
+  on every tick, so a click whose press and release straddled a tick landed on two different
+  buttons and did nothing, and the Generated, Save and Load buttons had the same problem. Rows,
+  their Next controls and the drawer tools are now created once and updated in place; a switch
+  shows the sent value at once so a second click toggles again before the server answers. The
+  breakpoint popover and the watch field are likewise left alone by ticks that change nothing
+  they show.
+- **Picking a state from the breakpoint list no longer closes the popover.** The chosen entry
+  removed itself from the list in its own mousedown handler, so the popover's outside-click check
+  saw a detached target and closed. The check now uses the event's path as it was when the mouse
+  went down.
+- **Watch expressions moved to the top line of the trace drawer,** next to the Generated, Save
+  and Load buttons; the tick summary (inputs, outputs, changed variables) sits directly above the
+  table it describes.
+- **Warnings are optional.** The preview's "Compiled with N warnings" panel has a **Hide
+  warnings** button and, once hidden, reads "Compiled, N warnings hidden" next to **Show
+  warnings**. The lightbulb on any KIELER warning offers **Hide KIELER warnings**;
+  **Hide Compiler Warnings** and **Show Compiler Warnings** are in the Command Palette and an
+  SCChart's editor title and context menus; while warnings are hidden a status bar item counts
+  them for the active model and shows them again on click. All of these set
+  `keith-vscode.diagnostics.showWarnings`, which keeps the compiler's warnings out of the editor
+  both from a compile and from the live analysis; errors always show. A running-simulation switch that was clicked holds its new value until the
+  server reports it, so a state pushed just before the click no longer flips it back for a moment
+  on a fast simulation.
+- **Code is back on the preview toolbar.** The editor-title entry only shows while the `.sctx`
+  text editor is active, which left no way to generate code from the preview.
 - **State breakpoints fire on entry only.** A breakpoint on a state that merely stayed active
   paused the simulation on every tick, because the server's state tracker compared the active
   states against a set that never held them. The "Compiling ... with ..." popup at the start of

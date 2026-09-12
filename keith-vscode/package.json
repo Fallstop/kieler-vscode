@@ -335,6 +335,18 @@
         "icon": "$(code)"
       },
       {
+        "command": "keith-vscode.hide-warnings",
+        "title": "Hide Compiler Warnings",
+        "category": "SCCharts",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "keith-vscode.show-warnings",
+        "title": "Show Compiler Warnings",
+        "category": "SCCharts",
+        "icon": "$(eye)"
+      },
+      {
         "command": "keith-vscode.save-generated-code",
         "title": "Save Generated File As...",
         "category": "SCCharts",
@@ -369,6 +381,14 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "when": "!keith.vscode:warningsHidden",
+          "command": "keith-vscode.hide-warnings"
+        },
+        {
+          "when": "keith.vscode:warningsHidden",
+          "command": "keith-vscode.show-warnings"
+        },
         {
           "when": "keith.vscode:compilationReady && resourceLangId in keith-vscode.languages",
           "command": "keith-vscode.compile"
@@ -554,6 +574,16 @@
           "group": "2_codegen@2"
         },
         {
+          "when": "resourceLangId == sctx && !keith.vscode:warningsHidden",
+          "command": "keith-vscode.hide-warnings",
+          "group": "3_warnings@1"
+        },
+        {
+          "when": "resourceLangId == sctx && keith.vscode:warningsHidden",
+          "command": "keith-vscode.show-warnings",
+          "group": "3_warnings@1"
+        },
+        {
           "command": "keith-vscode.simulation-step",
           "when": "keith.vscode:simulationRunning && (keith-diagram-focused || resourceLangId == sctx)",
           "group": "navigation@11"
@@ -649,6 +679,16 @@
           "when": "resourceLangId == sctx && keith.vscode:simulationRunning",
           "command": "keith-vscode.simulation-add-watch",
           "group": "simulation@2"
+        },
+        {
+          "when": "resourceLangId == sctx && !keith.vscode:warningsHidden",
+          "command": "keith-vscode.hide-warnings",
+          "group": "warnings@1"
+        },
+        {
+          "when": "resourceLangId == sctx && keith.vscode:warningsHidden",
+          "command": "keith-vscode.show-warnings",
+          "group": "warnings@1"
         }
       ],
       "explorer/context": [
@@ -718,6 +758,11 @@
           "minimum": 0,
           "default": 400,
           "description": "How long to wait after the last edit before the live analysis runs, in milliseconds."
+        },
+        "keith-vscode.diagnostics.showWarnings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the compiler's warnings as squiggles in the editor, from a compile and from the live analysis. Errors are always shown."
         },
         "keith-vscode.diagramColorTheme": {
           "type": "string",

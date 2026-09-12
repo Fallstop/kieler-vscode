@@ -37,11 +37,16 @@ export class LiveDiagnostics implements vscode.Disposable {
 
     private readonly subscriptions: vscode.Disposable[]
 
+    private readonly changed = new vscode.EventEmitter<void>()
+
+    /** Fires when a document's held live result changes or is dropped. */
+    readonly onDidChange = this.changed.event
+
     private config: LiveDiagnosticsConfig = { enabled: true, debounceMs: 400 }
 
     constructor(
         private readonly client: Pick<LanguageClient, 'sendNotification'>,
-        private readonly compiler: CompilerDiagnostics
+        private readonly compiler: Pick<CompilerDiagnostics, 'get' | 'onDidChange' | 'showWarnings'>
     ) {
         this.subscriptions = [
             // A compile that starts or finishes takes over; one that goes stale hands back to the live result.
@@ -52,6 +57,7 @@ export class LiveDiagnostics implements vscode.Disposable {
 
     dispose(): void {
         this.collection.dispose()
+        this.changed.dispose()
         this.subscriptions.forEach((subscription) => subscription.dispose())
     }
 
@@ -84,7 +90,9 @@ export class LiveDiagnostics implements vscode.Disposable {
         if (params.version != null && params.version !== document.version) return false
         const issues = withoutExplainedLoops(params.issues ?? [])
         this.latest.set(uri, { ...params, uri, issues, version: params.version ?? document.version })
-        return this.show(uri)
+        const shown = this.show(uri)
+        this.changed.fire()
+        return shown
     }
 
     /** The live issues currently held for a document, whether shown or hidden behind a compile report. */
@@ -103,7 +111,8 @@ export class LiveDiagnostics implements vscode.Disposable {
             this.clear(uri)
             return false
         }
-        const byFile = renderIssues(params.issues, uri, document, document.getText(), () => 'KIELER · live')
+        const issues = params.issues.filter((issue) => this.compiler.showWarnings || issue.severity === 'error')
+        const byFile = renderIssues(issues, uri, document, document.getText(), () => 'KIELER · live')
         this.clear(uri)
         byFile.forEach((diagnostics, file) => this.collection.set(vscode.Uri.parse(file), diagnostics))
         this.published.set(uri, new Set(byFile.keys()))
@@ -129,6 +138,6 @@ export class LiveDiagnostics implements vscode.Disposable {
 
     private forget(uri: string): void {
         this.clear(uri)
-        this.latest.delete(uri)
+        if (this.latest.delete(uri)) this.changed.fire()
     }
 }

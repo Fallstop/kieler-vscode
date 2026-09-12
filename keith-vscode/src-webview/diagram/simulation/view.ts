@@ -97,6 +97,8 @@ export class SimulationView {
 
     private drawerOpen = readSetting(DRAWER_KEY, 'open') === 'open'
 
+    private toolsKey = ''
+
     /** Number format per variable id; anything unset shows as decimal. */
     private readonly formats = readFormats()
 
@@ -179,8 +181,9 @@ export class SimulationView {
             },
             onmousedown: (event) => this.startResize(event as MouseEvent),
         })
-        const header = h('div.kv-drawer-header', {}, this.summary, this.tools)
-        replaceChildren(this.drawer, handle, header, this.notice, this.watches.el, this.timeline.el)
+        // Watches and the trace's tools share the top line; what the last tick did sits above the table.
+        const header = h('div.kv-drawer-header', {}, this.watches.el, this.tools)
+        replaceChildren(this.drawer, handle, header, this.notice, this.summary, this.timeline.el)
         this.resizeDrawer(Number(readSetting(DRAWER_HEIGHT_KEY, '220')))
 
         replaceChildren(this.root, this.toolbar.el, this.breakpoints.el, container, this.drawer)
@@ -227,10 +230,15 @@ export class SimulationView {
                 this.summary,
                 renderSummary(state, (id) => this.formatFor(id))
             )
-            replaceChildren(
-                this.tools,
-                renderDrawerTools(state, (command) => this.send(command))
-            )
+            // Rebuilt only when a tool's state changes; a click must not land on a replaced button.
+            const toolsKey = String(state.showInternal)
+            if (toolsKey !== this.toolsKey) {
+                this.toolsKey = toolsKey
+                replaceChildren(
+                    this.tools,
+                    renderDrawerTools(state, (command) => this.send(command))
+                )
+            }
             replaceChildren(this.notice, renderPauseNotice(state.debug))
             this.watches.render(state)
             this.timeline.render(state)
