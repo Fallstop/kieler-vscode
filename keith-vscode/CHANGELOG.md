@@ -4,19 +4,8 @@ All notable changes to the "keith-vscode" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [0.9.1] - 2026-09-12
+## [0.9.2] - 2026-09-12
 
-- **A click in the editor no longer pulls the cursor onto the state's name.** Sprotty fires its
-  diagram selection listener for selections the server sends as well as for clicks, so the cursor
-  sync's selection was answered with `diagram/openInTextEditor` and moved the editor cursor onto the
-  selected element. Cursor-driven selections are now marked `preventOpenSelection`; clicking in the
-  diagram still reveals the source when `keith-vscode.diagram.selectText` is on. The server cursor
-  suite checks that no reveal follows a cursor request.
-- **A running simulation keeps your zoom.** Every tick relays the diagram out to move the
-  highlighting, and klighd-core refits the diagram after each model update because "Resize To Fit
-  on Refresh" defaults to on and has had no switch since the sidebar went. Model updates that arrive
-  while a simulation is running are now applied without the refit, so the viewport stays where you
-  put it; the first layout after start and everything outside a simulation fit as before.
 - **Shorter messages.** Popups and diagnostic hints (instantaneous loops, scheduling cycles,
   shared clocks, redeclared variables, missing Java or C compilers) are cut to one or two lines.
 - **A quieter preview toolbar.** Icon buttons for Restart, Back, Step, Run and Stop, the tick,
@@ -58,15 +47,28 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   SCChart's editor title and context menus; while warnings are hidden a status bar item counts
   them for the active model and shows them again on click. All of these set
   `keith-vscode.diagnostics.showWarnings`, which keeps the compiler's warnings out of the editor
-  both from a compile and from the live analysis; errors always show. A running-simulation switch that was clicked holds its new value until the
-  server reports it, so a state pushed just before the click no longer flips it back for a moment
-  on a fast simulation.
+  both from a compile and from the live analysis; errors always show.
 - **Code is back on the preview toolbar.** The editor-title entry only shows while the `.sctx`
   text editor is active, which left no way to generate code from the preview.
 - **State breakpoints fire on entry only.** A breakpoint on a state that merely stayed active
   paused the simulation on every tick, because the server's state tracker compared the active
-  states against a set that never held them. The "Compiling ... with ..." popup at the start of
-  every compilation is gone; the status bar shows the progress.
+  states against a set that never held them.
+- **No popup at the start of a compilation.** The "Compiling ... with ..." notification is gone;
+  the status bar shows the progress.
+
+## [0.9.1] - 2026-09-12
+
+- **A click in the editor no longer pulls the cursor onto the state's name.** Sprotty fires its
+  diagram selection listener for selections the server sends as well as for clicks, so the cursor
+  sync's selection was answered with `diagram/openInTextEditor` and moved the editor cursor onto the
+  selected element. Cursor-driven selections are now marked `preventOpenSelection`; clicking in the
+  diagram still reveals the source when `keith-vscode.diagram.selectText` is on. The server cursor
+  suite checks that no reveal follows a cursor request.
+- **A running simulation keeps your zoom.** Every tick relays the diagram out to move the
+  highlighting, and klighd-core refits the diagram after each model update because "Resize To Fit
+  on Refresh" defaults to on and has had no switch since the sidebar went. Model updates that arrive
+  while a simulation is running are now applied without the refit, so the viewport stays where you
+  put it; the first layout after start and everything outside a simulation fit as before.
 
 ## [0.9.0] - 2026-09-11
 
