@@ -819,7 +819,7 @@
     "lint": "eslint .",
     "lint-fix": "eslint --fix .",
     "test": "node --test test/*.test.cjs",
-    "test:server": "node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs && node test/server-live-diagnostics.cjs && node test/server-highlight.cjs && node test/server-cursor-sync.cjs && node test/server-compile-ide.cjs && node test/server-startup.cjs && node test/server-simulation-debug.cjs && node test/server-workspace-kico.cjs",
+    "test:server": "node test/server-smoke.cjs && node test/server-diagnostics.cjs && node test/server-codegen.cjs && node test/server-live-diagnostics.cjs && node test/server-highlight.cjs && node test/server-cursor-sync.cjs && node test/server-compile-ide.cjs && node test/server-startup.cjs && node test/server-simulation-debug.cjs && node test/server-workspace-kico.cjs && node test/server-completion.cjs",
     "build": "webpack --mode production",
     "watch": "webpack --watch",
     "package": "node scripts/package-extension.cjs",

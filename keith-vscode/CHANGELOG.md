@@ -30,6 +30,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Shorter hover cards for variables.** The card shows the declaration as written, its comment,
   and how it is used ("Written 8 times, never read."); the kind, type, initial value and root
   scope are no longer repeated in prose.
+- **Completion for SCTX.** Keywords carry a one-line summary and a Markdown card
+  (`go to` is a weak abort, `pre(x)` reads the previous tick); triggers and effects propose
+  the variables, signals and clocks in scope with their declaration kind and comment, and
+  `go to`, `abort to` and `join to` propose the states of the enclosing region. `scchart`,
+  `state`, `initial state`, `region`, `if ... go to` and `entry do` also come as snippets
+  with tab stops. A half-typed keyword inside a state body and a variable inside a trigger
+  used to return nothing at all; bare operators such as `%`, `>>>` and `Pr=` are gone.
 - **State breakpoints fire on entry only.** A breakpoint on a state that merely stayed active
   paused the simulation on every tick, because the server's state tracker compared the active
   states against a set that never held them. The "Compiling ... with ..." popup at the start of

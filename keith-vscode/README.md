@@ -87,6 +87,14 @@ variable in a trigger, the target of a `go to`) shows the card of the declaratio
 **Go to Definition**, **Find All References** and **Rename** work on variables and states,
 and the Outline lists the chart's declarations, states and regions with their kinds.
 
+Completion proposes the keywords that matter to a modeller with a one-line summary and a
+Markdown card explaining what each does to the tick, the variables, signals and clocks in
+scope inside triggers and effects (labelled `input bool`, `output int`, with the declaration's
+comment), and the states of the enclosing region after `go to`, `abort to` and `join to`. The
+shapes you write by hand come as snippets with tab stops: `scchart Name { }`, `state Name { }`,
+`initial state Name`, `region Name { initial state S }`, `if cond go to Target` and
+`entry do x = 0`. Bare operators are not proposed.
+
 While a model compiles, the status bar shows the running processor and its place in the
 pipeline (`SCG (12/38)`); afterwards it shows the wall time, with the number of processors
 and the slowest one in the tooltip. **Stages** lists every processor's duration, flags the
